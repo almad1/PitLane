@@ -136,15 +136,15 @@ export DEBIAN_FRONTEND=noninteractive
 # that appear when apt's HTTP pipelining races on a freshly-networked container.
 APT="apt-get -o Acquire::http::Pipeline-Depth=0 -o Acquire::ForceIPv4=true"
 $APT update -qq
-$APT upgrade -y -qq
-$APT install -y -qq git curl openssl ca-certificates
+$APT upgrade -y -qq -o Dpkg::Use-Pty=0
+$APT install -y -qq -o Dpkg::Use-Pty=0 git curl openssl ca-certificates
 
 # ── Docker CE ─────────────────────────────────────────────────────────────────
 log "Installing Docker CE…"
 curl -fsSL https://get.docker.com | sh >/dev/null 2>&1
 systemctl enable docker --quiet
 systemctl start docker
-$APT install -y -qq docker-compose-plugin
+$APT install -y -qq -o Dpkg::Use-Pty=0 docker-compose-plugin
 log "Docker $(docker --version | awk '{print $3}' | tr -d ',')"
 
 # ── Clone repo ────────────────────────────────────────────────────────────────
@@ -217,13 +217,13 @@ docker compose up -d
 log "Stack status:"
 docker compose ps --format "table {{.Name}}\t{{.Status}}"
 
-# Print credentials on their own line so the host script can grep them
-echo ""
-echo "##PITLANE_CREDS##"
-echo "GRAFANA_PASSWORD=${GRAFANA_PASS}"
-echo "INFLUXDB_INIT_PASSWORD=${INFLUX_PASS}"
-echo "INFLUXDB_TOKEN=${TOKEN}"
-echo "##PITLANE_CREDS_END##"
+# Write credentials to stderr so they're captured by the host's log file
+# but don't appear inline during the live docker pull/start output.
+echo "##PITLANE_CREDS##"                        >&2
+echo "GRAFANA_PASSWORD=${GRAFANA_PASS}"          >&2
+echo "INFLUXDB_INIT_PASSWORD=${INFLUX_PASS}"     >&2
+echo "INFLUXDB_TOKEN=${TOKEN}"                   >&2
+echo "##PITLANE_CREDS_END##"                     >&2
 PITLANE_INNER_EOF
 
 # Inject real repo + branch values
