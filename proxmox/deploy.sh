@@ -8,13 +8,13 @@
 #
 # Override any setting via environment variables before calling:
 #
-#   CTID=210 IP="10.0.0.50/24,gw=10.0.0.1" bash <(curl -fsSL ...)
+#   CTID=210 CT_HOSTNAME=pitlane2 IP="10.0.0.50/24,gw=10.0.0.1" bash <(curl -fsSL ...)
 # ─────────────────────────────────────────────────────────────────────────────
 set -euo pipefail
 
 # ── Settings — edit or override with env vars ─────────────────────────────────
-CTID="${CTID:-200}"              # Proxmox container ID
-HOSTNAME="${HOSTNAME:-pitlane}"
+# CT_HOSTNAME avoids colliding with bash's built-in $HOSTNAME variable
+CT_HOSTNAME="${CT_HOSTNAME:-pitlane}"
 STORAGE="${STORAGE:-local-lvm}"  # Proxmox storage pool for the rootfs disk
 DISK_GB="${DISK_GB:-12}"
 CORES="${CORES:-2}"
@@ -22,6 +22,19 @@ RAM_MB="${RAM_MB:-2048}"         # InfluxDB needs headroom; 2 GB minimum
 BRIDGE="${BRIDGE:-vmbr0}"
 # IP: "dhcp"  or  "192.168.1.50/24,gw=192.168.1.1"
 IP="${IP:-dhcp}"
+
+# CTID: use Proxmox's cluster-aware next-ID finder so we never collide with
+# existing VMs or containers.  Falls back to manual scan if pvesh is absent.
+if [[ -z "${CTID:-}" ]]; then
+  CTID=$(pvesh get /cluster/nextid 2>/dev/null | tr -d '"' || true)
+fi
+if [[ -z "${CTID:-}" ]]; then
+  # Fallback: scan pct + qm lists and find the first gap above 100
+  USED=$( { pct list 2>/dev/null; qm list 2>/dev/null; } \
+          | awk 'NR>1 {print $1}' | sort -n )
+  CTID=100
+  while printf '%s\n' "$USED" | grep -qx "$CTID"; do CTID=$(( CTID + 1 )); done
+fi
 
 REPO="${REPO:-https://github.com/almad1/PitLane.git}"
 BRANCH="${BRANCH:-main}"
@@ -43,7 +56,7 @@ echo ""
 echo -e "  ${C}PitLane — Proxmox LXC Installer${N}"
 echo ""
 printf "  %-18s %s\n" "Container ID:"  "$CTID"
-printf "  %-18s %s\n" "Hostname:"      "$HOSTNAME"
+printf "  %-18s %s\n" "Hostname:"      "$CT_HOSTNAME"
 printf "  %-18s %s  (${DISK_GB} GB disk)\n" "Storage:"  "$STORAGE"
 printf "  %-18s %s cores / %s MB RAM\n" "Resources:" "$CORES" "$RAM_MB"
 printf "  %-18s %s  ip=%s\n" "Network:"  "$BRIDGE" "$IP"
@@ -76,7 +89,7 @@ pct status "$CTID" &>/dev/null && die "Container $CTID already exists. Use a dif
 
 log "Creating LXC $CTID…"
 pct create "$CTID" "local:vztmpl/$TMPL" \
-  --hostname    "$HOSTNAME"                 \
+  --hostname    "$CT_HOSTNAME"              \
   --ostype      debian                      \
   --cores       "$CORES"                    \
   --memory      "$RAM_MB"                   \
