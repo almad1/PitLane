@@ -128,17 +128,23 @@ warn() { echo -e "  ${Y}⚠${N}  $*"; }
 
 # ── System packages ───────────────────────────────────────────────────────────
 log "Updating system packages…"
+# Suppress locale noise from a bare LXC template
+export LANG=C
+export LC_ALL=C
 export DEBIAN_FRONTEND=noninteractive
-apt-get update -qq
-apt-get upgrade -y -qq 2>/dev/null
-apt-get install -y -qq git curl openssl ca-certificates 2>/dev/null
+# Pipeline-Depth=0 prevents the flood of "Tried to start delayed item" warnings
+# that appear when apt's HTTP pipelining races on a freshly-networked container.
+APT="apt-get -o Acquire::http::Pipeline-Depth=0 -o Acquire::ForceIPv4=true"
+$APT update -qq
+$APT upgrade -y -qq
+$APT install -y -qq git curl openssl ca-certificates
 
 # ── Docker CE ─────────────────────────────────────────────────────────────────
 log "Installing Docker CE…"
 curl -fsSL https://get.docker.com | sh >/dev/null 2>&1
 systemctl enable docker --quiet
 systemctl start docker
-apt-get install -y -qq docker-compose-plugin 2>/dev/null
+$APT install -y -qq docker-compose-plugin
 log "Docker $(docker --version | awk '{print $3}' | tr -d ',')"
 
 # ── Clone repo ────────────────────────────────────────────────────────────────
