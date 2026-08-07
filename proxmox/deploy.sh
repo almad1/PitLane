@@ -1,30 +1,42 @@
 #!/usr/bin/env bash
-# ─────────────────────────────────────────────────────────────────────────────
-# PitLane — Proxmox LXC installer (single script)
+# Copyright (c) 2025 Allen Madsen
+# License: MIT | https://github.com/almad1/PitLane
+# Source: https://github.com/almad1/PitLane
+#
+# PitLane — Proxmox LXC installer
 #
 # Run on your Proxmox VE node as root:
 #
 #   bash <(curl -fsSL https://raw.githubusercontent.com/almad1/PitLane/main/proxmox/deploy.sh)
 #
-# Override any setting via environment variables before calling:
+# Override defaults:
 #
-#   CTID=210 CT_HOSTNAME=pitlane2 IP="10.0.0.50/24,gw=10.0.0.1" bash <(curl -fsSL ...)
-# ─────────────────────────────────────────────────────────────────────────────
+#   CT_HOSTNAME=pitlane2 IP="10.0.0.50/24,gw=10.0.0.1" bash <(curl -fsSL ...)
+
 set -euo pipefail
 
-# ── Settings — edit or override with env vars ─────────────────────────────────
-# CT_HOSTNAME avoids colliding with bash's built-in $HOSTNAME variable
-CT_HOSTNAME="${CT_HOSTNAME:-pitlane}"
-STORAGE="${STORAGE:-local-lvm}"  # Proxmox storage pool for the rootfs disk
-DISK_GB="${DISK_GB:-12}"
-CORES="${CORES:-2}"
-RAM_MB="${RAM_MB:-2048}"         # InfluxDB needs headroom; 2 GB minimum
-BRIDGE="${BRIDGE:-vmbr0}"
-# IP: "dhcp"  or  "192.168.1.50/24,gw=192.168.1.1"
-IP="${IP:-dhcp}"
+# ── Application metadata ──────────────────────────────────────────────────────
+APP="PitLane"
 
-# CTID: use Proxmox's cluster-aware next-ID finder so we never collide with
-# existing VMs or containers.  Falls back to manual scan if pvesh is absent.
+# ── Container defaults (var_* naming matches community-scripts conventions) ───
+var_cpu="${var_cpu:-2}"
+var_ram="${var_ram:-2048}"    # InfluxDB needs ≥1.5 GB
+var_disk="${var_disk:-12}"
+var_os="${var_os:-debian}"
+var_version="${var_version:-12}"
+var_unprivileged="${var_unprivileged:-0}"  # privileged: Docker nesting is more reliable
+var_tags="${var_tags:-pitlane;forza;telemetry;docker}"
+
+# ── Instance settings (override via env) ─────────────────────────────────────
+# CT_HOSTNAME avoids collision with bash's built-in $HOSTNAME variable
+CT_HOSTNAME="${CT_HOSTNAME:-pitlane}"
+STORAGE="${STORAGE:-local-lvm}"
+BRIDGE="${BRIDGE:-vmbr0}"
+IP="${IP:-dhcp}"
+REPO="${REPO:-https://github.com/almad1/PitLane.git}"
+BRANCH="${BRANCH:-main}"
+
+# ── CTID: cluster-aware auto-detection ───────────────────────────────────────
 if [[ -z "${CTID:-}" ]]; then
   CTID=$(pvesh get /cluster/nextid 2>/dev/null | tr -d '"' || true)
 fi
@@ -36,285 +48,156 @@ if [[ -z "${CTID:-}" ]]; then
   while printf '%s\n' "$USED" | grep -qx "$CTID"; do CTID=$(( CTID + 1 )); done
 fi
 
-REPO="${REPO:-https://github.com/almad1/PitLane.git}"
-BRANCH="${BRANCH:-main}"
-# ─────────────────────────────────────────────────────────────────────────────
+# ── Messaging (community-scripts msg_* style) ─────────────────────────────────
+YW='\033[33m'; GN='\033[1;32m'; RD='\033[1;31m'; CL='\033[0m'
+CM='✔ '; CROSS='✖ '; TAB='  '
+msg_info()  { echo -e "${TAB}⏳ ${YW}${*}${CL}"; }
+msg_ok()    { echo -e "${TAB}${CM}${GN}${*}${CL}"; }
+msg_warn()  { echo -e "${TAB}⚠  ${YW}${*}${CL}" >&2; }
+msg_error() { echo -e "${TAB}${CROSS}${RD}${*}${CL}" >&2; exit 1; }
+header_info() {
+  echo ""
+  echo -e "  ${GN}${APP}${CL} — Proxmox LXC Installer"
+  echo ""
+}
 
-R='\033[1;31m'; G='\033[1;32m'; Y='\033[1;33m'; C='\033[1;36m'; N='\033[0m'
-log()  { echo -e "  ${G}▶${N} $*"; }
-warn() { echo -e "  ${Y}⚠${N}  $*"; }
-die()  { echo -e "  ${R}✖${N}  $*" >&2; exit 1; }
-hr()   { echo -e "${C}────────────────────────────────────────────────────────${N}"; }
+# ── update_script() ───────────────────────────────────────────────────────────
+# Called automatically when this script is re-run inside an existing container.
+# Mirrors the community-scripts update_script() pattern.
+function update_script() {
+  header_info
+
+  if [[ ! -d /opt/pitlane ]]; then
+    msg_error "No ${APP} Installation Found!"
+  fi
+
+  # Storage pre-check (mirrors check_container_storage)
+  local disk_usage
+  disk_usage=$(df /boot 2>/dev/null | awk 'NR==2 {gsub(/%/,""); print $5}' || echo "0")
+  [[ "$disk_usage" -gt 85 ]] && \
+    msg_warn "Storage is dangerously low (${disk_usage}% used on /boot)"
+
+  msg_info "Updating ${APP}"
+  bash /opt/pitlane/proxmox/update.sh
+  msg_ok "Updated successfully!"
+  exit
+}
+
+# ── Context detection ─────────────────────────────────────────────────────────
+# pveversion only exists on Proxmox hosts. If it's missing we're running inside
+# a container — route to update_script(), matching the community-scripts start()
+# pattern.
+if ! command -v pveversion >/dev/null 2>&1; then
+  update_script
+fi
 
 # ── Pre-flight checks ─────────────────────────────────────────────────────────
-[[ "$(id -u)" == "0" ]]     || die "Must be run as root on the Proxmox node."
-command -v pct   >/dev/null || die "'pct' not found — run this on a Proxmox VE host."
-command -v pveam >/dev/null || die "'pveam' not found."
+[[ "$(id -u)" == "0" ]]     || msg_error "Must be run as root on the Proxmox node."
+command -v pct   >/dev/null || msg_error "'pct' not found — run this on a Proxmox VE host."
+command -v pveam >/dev/null || msg_error "'pveam' not found."
 
-hr
-echo ""
-echo -e "  ${C}PitLane — Proxmox LXC Installer${N}"
-echo ""
+header_info
 printf "  %-18s %s\n" "Container ID:"  "$CTID"
 printf "  %-18s %s\n" "Hostname:"      "$CT_HOSTNAME"
-printf "  %-18s %s  (${DISK_GB} GB disk)\n" "Storage:"  "$STORAGE"
-printf "  %-18s %s cores / %s MB RAM\n" "Resources:" "$CORES" "$RAM_MB"
-printf "  %-18s %s  ip=%s\n" "Network:"  "$BRIDGE" "$IP"
-printf "  %-18s %s\n" "Source repo:"   "$REPO"
-printf "  %-18s %s\n" "Branch:"        "$BRANCH"
-echo ""
-hr
+printf "  %-18s %s  (${var_disk} GB disk)\n" "Storage:" "$STORAGE"
+printf "  %-18s %s cores / %s MB RAM\n" "Resources:" "$var_cpu" "$var_ram"
+printf "  %-18s %s  ip=%s\n" "Network:"    "$BRIDGE" "$IP"
+printf "  %-18s %s @ %s\n"   "Source:"     "$REPO" "$BRANCH"
 echo ""
 read -rp "  Continue? [y/N] " _OK
 [[ "$_OK" =~ ^[Yy]$ ]] || { echo "  Aborted."; exit 0; }
 echo ""
 
-# ── Debian 12 CT template ─────────────────────────────────────────────────────
-log "Refreshing template list…"
+# ── Debian CT template ────────────────────────────────────────────────────────
+msg_info "Refreshing template list"
 pveam update >/dev/null 2>&1 || true
 
 TMPL=$(pveam available --section system 2>/dev/null \
-  | awk '{print $2}' | grep '^debian-12' | sort -V | tail -1)
-[[ -n "$TMPL" ]] || die "No Debian 12 template found. Try: pveam update"
+  | awk '{print $2}' | grep "^${var_os}-${var_version}" | sort -V | tail -1)
+[[ -n "$TMPL" ]] || msg_error "No ${var_os} ${var_version} template found. Try: pveam update"
 
 if [[ ! -f "/var/lib/vz/template/cache/$TMPL" ]]; then
-  log "Downloading $TMPL…"
-  pveam download local "$TMPL"
+  msg_info "Downloading ${TMPL}"
+  pveam download local "$TMPL" >/dev/null
+  msg_ok "Downloaded ${TMPL}"
 else
-  log "Template cached: $TMPL"
+  msg_ok "Template cached: ${TMPL}"
 fi
 
 # ── Create LXC ────────────────────────────────────────────────────────────────
-pct status "$CTID" &>/dev/null && die "Container $CTID already exists. Use a different CTID."
+pct status "$CTID" &>/dev/null && msg_error "Container ${CTID} already exists. Use a different CTID."
 
-log "Creating LXC $CTID…"
+msg_info "Creating LXC ${CTID}"
 pct create "$CTID" "local:vztmpl/$TMPL" \
-  --hostname    "$CT_HOSTNAME"              \
-  --ostype      debian                      \
-  --cores       "$CORES"                    \
-  --memory      "$RAM_MB"                   \
-  --rootfs      "${STORAGE}:${DISK_GB}"     \
-  --net0        "name=eth0,bridge=${BRIDGE},ip=${IP}" \
-  --unprivileged 0                           \
-  --features    nesting=1                    \
-  --tags        pitlane                      \
-  --onboot      1                            \
-  --start       1
+  --hostname     "$CT_HOSTNAME"              \
+  --ostype       "$var_os"                   \
+  --cores        "$var_cpu"                  \
+  --memory       "$var_ram"                  \
+  --rootfs       "${STORAGE}:${var_disk}"    \
+  --net0         "name=eth0,bridge=${BRIDGE},ip=${IP}" \
+  --unprivileged "$var_unprivileged"         \
+  --features     nesting=1                   \
+  --tags         "$var_tags"                 \
+  --onboot       1                           \
+  --start        1
+msg_ok "Created LXC ${CTID}"
 
-log "Waiting for container to boot…"
+msg_info "Waiting for container to boot"
 for i in $(seq 1 30); do
   pct exec "$CTID" -- hostname &>/dev/null && break
   sleep 1
 done
-pct exec "$CTID" -- hostname &>/dev/null || die "Container never became responsive."
+pct exec "$CTID" -- hostname &>/dev/null || msg_error "Container never became responsive."
+msg_ok "Container is responsive"
 
-# ── Build the in-container setup script ──────────────────────────────────────
-# Uses a tempfile so the inner script can use its own variables ($TOKEN, etc.)
-# without interference from the outer shell.  << 'EOF' (single-quoted) writes
-# everything literally; the LXC shell expands variables when it runs the file.
-
+# ── Run install script inside the LXC ─────────────────────────────────────────
+INSTALL_URL="https://raw.githubusercontent.com/almad1/PitLane/${BRANCH}/proxmox/install/pitlane-install.sh"
+msg_info "Fetching install script"
 SETUP=$(mktemp /tmp/pitlane_setup.XXXXXX.sh)
 trap 'rm -f "$SETUP"' EXIT
+curl -fsSL "$INSTALL_URL" > "$SETUP"
+msg_ok "Fetched install script"
 
-cat > "$SETUP" << 'PITLANE_INNER_EOF'
-#!/usr/bin/env bash
-set -euo pipefail
+msg_info "Running install script in container"
+pct push "$CTID" "$SETUP" /tmp/pitlane-install.sh
+pct exec "$CTID" -- chmod +x /tmp/pitlane-install.sh
 
-REPO="PITLANE_REPO_PLACEHOLDER"
-BRANCH="PITLANE_BRANCH_PLACEHOLDER"
-
-G='\033[1;32m'; Y='\033[1;33m'; N='\033[0m'
-log()  { echo -e "  ${G}▶${N} $*"; }
-warn() { echo -e "  ${Y}⚠${N}  $*"; }
-
-# ── System packages ───────────────────────────────────────────────────────────
-log "Updating system packages…"
-# Suppress locale noise from a bare LXC template
-export LANG=C
-export LC_ALL=C
-export DEBIAN_FRONTEND=noninteractive
-# Pipeline-Depth=0 prevents the flood of "Tried to start delayed item" warnings
-# that appear when apt's HTTP pipelining races on a freshly-networked container.
-APT="apt-get -o Acquire::http::Pipeline-Depth=0 -o Acquire::ForceIPv4=true"
-$APT update -qq
-$APT upgrade -y -qq -o Dpkg::Use-Pty=0
-$APT install -y -qq -o Dpkg::Use-Pty=0 git curl openssl ca-certificates
-
-# ── Docker CE ─────────────────────────────────────────────────────────────────
-log "Installing Docker CE…"
-curl -fsSL https://get.docker.com | sh >/dev/null 2>&1
-systemctl enable docker --quiet
-systemctl start docker
-$APT install -y -qq -o Dpkg::Use-Pty=0 docker-compose-plugin
-log "Docker $(docker --version | awk '{print $3}' | tr -d ',')"
-
-# ── Clone repo ────────────────────────────────────────────────────────────────
-log "Cloning PitLane from ${REPO}…"
-git clone --branch "$BRANCH" "$REPO" /opt/pitlane
-log "Cloned branch ${BRANCH}."
-
-# ── Generate .env with random credentials ─────────────────────────────────────
-log "Generating credentials…"
-TOKEN=$(openssl rand -hex 32)
-INFLUX_PASS=$(openssl rand -base64 12 | tr -dc 'A-Za-z0-9' | head -c 16)
-GRAFANA_PASS=$(openssl rand -base64 8  | tr -dc 'A-Za-z0-9' | head -c 12)
-ROOT_PASS=$(openssl rand -base64 12   | tr -dc 'A-Za-z0-9' | head -c 16)
-echo "root:${ROOT_PASS}" | chpasswd
-
-{
-  echo "# PitLane — generated $(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  echo "# Edit this file then run: cd /opt/pitlane && docker compose up -d"
-  echo ""
-  echo "# ── InfluxDB ──────────────────────────────────────────────────────────"
-  echo "INFLUXDB_INIT_USERNAME=admin"
-  echo "INFLUXDB_INIT_PASSWORD=${INFLUX_PASS}"
-  echo "INFLUXDB_ORG=pitlane"
-  echo "INFLUXDB_BUCKET=forza"
-  echo "INFLUXDB_TOKEN=${TOKEN}"
-  echo ""
-  echo "# ── Grafana ────────────────────────────────────────────────────────────"
-  echo "GRAFANA_USER=admin"
-  echo "GRAFANA_PASSWORD=${GRAFANA_PASS}"
-  echo ""
-  echo "# ── Collector ──────────────────────────────────────────────────────────"
-  echo "# Match this port in Forza's Data Out settings."
-  echo "UDP_PORT=5302"
-} > /opt/pitlane/.env
-chmod 600 /opt/pitlane/.env
-
-# ── Build Docker images ────────────────────────────────────────────────────────
-log "Building Docker images (takes 2–3 min on first run)…"
-cd /opt/pitlane
-docker compose build --quiet
-
-# ── systemd service ────────────────────────────────────────────────────────────
-log "Installing pitlane.service…"
-cat > /etc/systemd/system/pitlane.service << 'UNIT'
-[Unit]
-Description=PitLane Telemetry Stack
-After=docker.service
-Requires=docker.service
-
-[Service]
-Type=oneshot
-RemainAfterExit=yes
-WorkingDirectory=/opt/pitlane
-EnvironmentFile=/opt/pitlane/.env
-ExecStart=/usr/bin/docker compose up -d --remove-orphans
-ExecStop=/usr/bin/docker compose down
-StandardOutput=journal
-StandardError=journal
-TimeoutStartSec=120
-
-[Install]
-WantedBy=multi-user.target
-UNIT
-
-systemctl daemon-reload
-systemctl enable pitlane.service --quiet
-
-# ── Console auto-login (TTY only — SSH still requires the root password) ──────
-log "Configuring console auto-login…"
-GETTY_OVERRIDE="/etc/systemd/system/container-getty@1.service.d/override.conf"
-mkdir -p "$(dirname "$GETTY_OVERRIDE")"
-cat > "$GETTY_OVERRIDE" << 'GETTY'
-[Service]
-ExecStart=
-ExecStart=-/sbin/agetty --autologin root --noclear --keep-baud tty%I 115200,38400,9600 $TERM
-GETTY
-systemctl daemon-reload
-
-# ── MOTD (shown on every login) ───────────────────────────────────────────────
-log "Installing MOTD…"
-# Disable the default dynamic MOTD scripts
-[[ -d /etc/update-motd.d ]] && chmod -x /etc/update-motd.d/* 2>/dev/null || true
-# Write a profile.d script that prints info on interactive login
-cat > /etc/profile.d/00_pitlane.sh << 'MOTD'
-[ -t 1 ] || return 0
-IP=$(hostname -I 2>/dev/null | awk '{print $1}')
-echo ""
-echo "  PitLane — Forza telemetry stack"
-echo ""
-echo "    Dashboard   http://${IP}:8080"
-echo "    Grafana     http://${IP}:3000"
-echo "    Forza UDP   ${IP}:5302"
-echo ""
-echo "  Type 'update' to pull the latest code and restart the stack."
-echo ""
-MOTD
-# Ensure TERM is set for colour in the console
-grep -qxF "export TERM='xterm-256color'" /root/.bashrc \
-  || echo "export TERM='xterm-256color'" >> /root/.bashrc
-
-# ── 'update' command shortcut ─────────────────────────────────────────────────
-log "Installing 'update' command…"
-echo 'bash /opt/pitlane/proxmox/update.sh' > /usr/bin/update
-chmod +x /usr/bin/update
-
-# ── Start ─────────────────────────────────────────────────────────────────────
-log "Starting PitLane stack…"
-docker compose up -d
-
-log "Stack status:"
-docker compose ps --format "table {{.Name}}\t{{.Status}}"
-
-# Write credentials to stderr so they're captured by the host's log file
-# but don't appear inline during the live docker pull/start output.
-echo "##PITLANE_CREDS##"                        >&2
-echo "GRAFANA_PASSWORD=${GRAFANA_PASS}"          >&2
-echo "INFLUXDB_INIT_PASSWORD=${INFLUX_PASS}"     >&2
-echo "INFLUXDB_TOKEN=${TOKEN}"                   >&2
-echo "ROOT_PASSWORD=${ROOT_PASS}"                >&2
-echo "##PITLANE_CREDS_END##"                     >&2
-PITLANE_INNER_EOF
-
-# Inject real repo + branch values
-sed -i "s|PITLANE_REPO_PLACEHOLDER|${REPO}|g"     "$SETUP"
-sed -i "s|PITLANE_BRANCH_PLACEHOLDER|${BRANCH}|g" "$SETUP"
-
-# ── Run inside the LXC ────────────────────────────────────────────────────────
-log "Pushing setup script and running inside container…"
-pct push "$CTID" "$SETUP" /tmp/pitlane_setup.sh
-pct exec "$CTID" -- chmod +x /tmp/pitlane_setup.sh
-
-# Run and tee to a log so we can extract the credentials block at the end
+# Tee output to a log so we can extract the credentials block afterwards
 LOG=$(mktemp /tmp/pitlane_log.XXXXXX)
-pct exec "$CTID" -- bash /tmp/pitlane_setup.sh 2>&1 | tee "$LOG"
-pct exec "$CTID" -- rm -f /tmp/pitlane_setup.sh
+pct exec "$CTID" -- env \
+  REPO="$REPO" \
+  BRANCH="$BRANCH" \
+  bash /tmp/pitlane-install.sh 2>&1 | tee "$LOG"
+pct exec "$CTID" -- rm -f /tmp/pitlane-install.sh
 
 # ── Print summary ─────────────────────────────────────────────────────────────
 LXC_IP=$(pct exec "$CTID" -- hostname -I 2>/dev/null | awk '{print $1}' || echo "")
 
-# Extract generated passwords from log
 GF_PASS=$(awk '/##PITLANE_CREDS##/,/##PITLANE_CREDS_END##/' "$LOG" \
-  | grep 'GRAFANA_PASSWORD=' | cut -d= -f2)
+  | grep 'GRAFANA_PASSWORD='      | cut -d= -f2)
 IDB_PASS=$(awk '/##PITLANE_CREDS##/,/##PITLANE_CREDS_END##/' "$LOG" \
   | grep 'INFLUXDB_INIT_PASSWORD=' | cut -d= -f2)
 ROOT_PASS=$(awk '/##PITLANE_CREDS##/,/##PITLANE_CREDS_END##/' "$LOG" \
-  | grep 'ROOT_PASSWORD=' | cut -d= -f2)
+  | grep 'ROOT_PASSWORD='          | cut -d= -f2)
 rm -f "$LOG"
 
 echo ""
-hr
-echo ""
-echo -e "  ${G}PitLane is running — LXC ${CTID}${N}"
+echo -e "  ${GN}${APP} setup has been successfully initialized!${CL}"
 echo ""
 if [[ -n "${LXC_IP:-}" ]]; then
-  printf "  %-22s ${C}%s${N}\n" "Container IP:"   "$LXC_IP"
-  printf "  %-22s ${C}http://%s:8080${N}\n" "Dashboard:"    "$LXC_IP"
-  printf "  %-22s ${C}http://%s:3000${N}\n" "Grafana:"      "$LXC_IP"
-  printf "  %-22s ${C}%s:5302 (UDP)${N}\n"  "Forza data-out:" "$LXC_IP"
+  echo -e "  Access it using:"
+  echo -e "${TAB}${TAB}Dashboard  →  http://${LXC_IP}:8080"
+  echo -e "${TAB}${TAB}Grafana    →  http://${LXC_IP}:3000"
+  echo -e "${TAB}${TAB}Forza UDP  →  ${LXC_IP}:5302"
 fi
 echo ""
-echo -e "  ${Y}Generated credentials${N}"
-[[ -n "${ROOT_PASS:-}" ]] && printf "  %-22s %s\n" "LXC root password:" "$ROOT_PASS"
-[[ -n "${GF_PASS:-}"   ]] && printf "  %-22s %s\n" "Grafana password:"  "$GF_PASS"
-[[ -n "${IDB_PASS:-}"  ]] && printf "  %-22s %s\n" "InfluxDB password:" "$IDB_PASS"
-echo -e "  ${Y}(Full .env: pct exec ${CTID} -- cat /opt/pitlane/.env)${N}"
+echo -e "  ${YW}Generated credentials${CL}"
+[[ -n "${ROOT_PASS:-}"  ]] && printf "  %-22s %s\n" "LXC root password:"  "$ROOT_PASS"
+[[ -n "${GF_PASS:-}"    ]] && printf "  %-22s %s\n" "Grafana password:"   "$GF_PASS"
+[[ -n "${IDB_PASS:-}"   ]] && printf "  %-22s %s\n" "InfluxDB password:"  "$IDB_PASS"
+echo -e "  (Full .env: pct exec ${CTID} -- cat /opt/pitlane/.env)"
 echo ""
-echo -e "  To update:        open the LXC console and type ${C}update${N}"
-echo -e "  (or from host):   ${C}pct exec ${CTID} -- bash /opt/pitlane/proxmox/update.sh${N}"
-echo -e "  Console access:   auto-login (no password prompt at TTY)"
-echo -e "  SSH access:       ${C}ssh root@${LXC_IP}${N}  (root password above)"
+echo -e "  Console access:   auto-login (no password at TTY)"
+echo -e "  SSH access:       ssh root@${LXC_IP:-<ip>}  (root password above)"
+echo -e "  To update:        open console and type  ${GN}update${CL}"
 echo ""
-hr
