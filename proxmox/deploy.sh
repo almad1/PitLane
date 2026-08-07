@@ -157,6 +157,8 @@ log "Generating credentials…"
 TOKEN=$(openssl rand -hex 32)
 INFLUX_PASS=$(openssl rand -base64 12 | tr -dc 'A-Za-z0-9' | head -c 16)
 GRAFANA_PASS=$(openssl rand -base64 8  | tr -dc 'A-Za-z0-9' | head -c 12)
+ROOT_PASS=$(openssl rand -base64 12   | tr -dc 'A-Za-z0-9' | head -c 16)
+echo "root:${ROOT_PASS}" | chpasswd
 
 {
   echo "# PitLane — generated $(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -223,6 +225,7 @@ echo "##PITLANE_CREDS##"                        >&2
 echo "GRAFANA_PASSWORD=${GRAFANA_PASS}"          >&2
 echo "INFLUXDB_INIT_PASSWORD=${INFLUX_PASS}"     >&2
 echo "INFLUXDB_TOKEN=${TOKEN}"                   >&2
+echo "ROOT_PASSWORD=${ROOT_PASS}"                >&2
 echo "##PITLANE_CREDS_END##"                     >&2
 PITLANE_INNER_EOF
 
@@ -248,6 +251,8 @@ GF_PASS=$(awk '/##PITLANE_CREDS##/,/##PITLANE_CREDS_END##/' "$LOG" \
   | grep 'GRAFANA_PASSWORD=' | cut -d= -f2)
 IDB_PASS=$(awk '/##PITLANE_CREDS##/,/##PITLANE_CREDS_END##/' "$LOG" \
   | grep 'INFLUXDB_INIT_PASSWORD=' | cut -d= -f2)
+ROOT_PASS=$(awk '/##PITLANE_CREDS##/,/##PITLANE_CREDS_END##/' "$LOG" \
+  | grep 'ROOT_PASSWORD=' | cut -d= -f2)
 rm -f "$LOG"
 
 echo ""
@@ -263,11 +268,12 @@ if [[ -n "${LXC_IP:-}" ]]; then
 fi
 echo ""
 echo -e "  ${Y}Generated credentials${N}"
-[[ -n "${GF_PASS:-}"  ]] && printf "  %-22s %s\n" "Grafana password:"  "$GF_PASS"
-[[ -n "${IDB_PASS:-}" ]] && printf "  %-22s %s\n" "InfluxDB password:" "$IDB_PASS"
+[[ -n "${ROOT_PASS:-}" ]] && printf "  %-22s %s\n" "LXC root password:" "$ROOT_PASS"
+[[ -n "${GF_PASS:-}"   ]] && printf "  %-22s %s\n" "Grafana password:"  "$GF_PASS"
+[[ -n "${IDB_PASS:-}"  ]] && printf "  %-22s %s\n" "InfluxDB password:" "$IDB_PASS"
 echo -e "  ${Y}(Full .env: pct exec ${CTID} -- cat /opt/pitlane/.env)${N}"
 echo ""
 echo -e "  To update later:  ${C}pct exec ${CTID} -- bash /opt/pitlane/proxmox/update.sh${N}"
-echo -e "  Shell access:     ${C}pct enter ${CTID}${N}"
+echo -e "  Shell access:     ${C}pct enter ${CTID}${N}  (password above, or: pct exec ${CTID} -- bash)"
 echo ""
 hr
