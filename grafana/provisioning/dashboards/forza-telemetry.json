@@ -1,0 +1,992 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {"type": "grafana", "uid": "-- Grafana --"},
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "description": "Forza Horizon live telemetry — session view, driver inputs, tire data, and lap history",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "id": 1,
+      "title": "Speed",
+      "type": "stat",
+      "gridPos": {"h": 4, "w": 4, "x": 0, "y": 0},
+      "datasource": {"type": "influxdb", "uid": "influxdb"},
+      "targets": [{
+        "datasource": {"type": "influxdb", "uid": "influxdb"},
+        "refId": "A",
+        "query": "from(bucket: v.defaultBucket)\n  |> range(start: -30s)\n  |> filter(fn: (r) => r._measurement == \"telemetry\" and r._field == \"speed_kmh\")\n  |> last()"
+      }],
+      "options": {
+        "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false},
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "velocitykmh",
+          "decimals": 1,
+          "color": {"mode": "thresholds"},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 200},
+              {"color": "red", "value": 280}
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 2,
+      "title": "Engine RPM",
+      "type": "gauge",
+      "gridPos": {"h": 4, "w": 4, "x": 4, "y": 0},
+      "datasource": {"type": "influxdb", "uid": "influxdb"},
+      "targets": [{
+        "datasource": {"type": "influxdb", "uid": "influxdb"},
+        "refId": "A",
+        "query": "from(bucket: v.defaultBucket)\n  |> range(start: -30s)\n  |> filter(fn: (r) => r._measurement == \"telemetry\" and r._field == \"engine_rpm\")\n  |> last()"
+      }],
+      "options": {
+        "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false},
+        "orientation": "auto",
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "rotrpm",
+          "decimals": 0,
+          "min": 0,
+          "max": 9000,
+          "color": {"mode": "thresholds"},
+          "thresholds": {
+            "mode": "percentage",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 75},
+              {"color": "red", "value": 90}
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 3,
+      "title": "Gear",
+      "type": "stat",
+      "gridPos": {"h": 4, "w": 3, "x": 8, "y": 0},
+      "datasource": {"type": "influxdb", "uid": "influxdb"},
+      "targets": [{
+        "datasource": {"type": "influxdb", "uid": "influxdb"},
+        "refId": "A",
+        "query": "from(bucket: v.defaultBucket)\n  |> range(start: -30s)\n  |> filter(fn: (r) => r._measurement == \"telemetry\" and r._field == \"gear\")\n  |> last()"
+      }],
+      "options": {
+        "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false},
+        "orientation": "auto",
+        "textMode": "value",
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 0,
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {"text": "N", "color": "grey", "index": 0}
+              }
+            }
+          ],
+          "color": {"mode": "fixed", "fixedColor": "blue"},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{"color": "blue", "value": null}]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 4,
+      "title": "Current Lap",
+      "type": "stat",
+      "gridPos": {"h": 4, "w": 4, "x": 11, "y": 0},
+      "datasource": {"type": "influxdb", "uid": "influxdb"},
+      "targets": [{
+        "datasource": {"type": "influxdb", "uid": "influxdb"},
+        "refId": "A",
+        "query": "from(bucket: v.defaultBucket)\n  |> range(start: -30s)\n  |> filter(fn: (r) => r._measurement == \"telemetry\" and r._field == \"current_lap_time\")\n  |> last()\n  |> map(fn: (r) => ({r with _value: r._value * 1000.0}))"
+      }],
+      "options": {
+        "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false},
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "dtdurationms",
+          "color": {"mode": "fixed", "fixedColor": "white"},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{"color": "white", "value": null}]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 5,
+      "title": "Best Lap",
+      "type": "stat",
+      "gridPos": {"h": 4, "w": 4, "x": 15, "y": 0},
+      "datasource": {"type": "influxdb", "uid": "influxdb"},
+      "targets": [{
+        "datasource": {"type": "influxdb", "uid": "influxdb"},
+        "refId": "A",
+        "query": "from(bucket: v.defaultBucket)\n  |> range(start: -30s)\n  |> filter(fn: (r) => r._measurement == \"telemetry\" and r._field == \"best_lap\" and r._value > 0.0)\n  |> last()\n  |> map(fn: (r) => ({r with _value: r._value * 1000.0}))"
+      }],
+      "options": {
+        "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false},
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "dtdurationms",
+          "color": {"mode": "fixed", "fixedColor": "purple"},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{"color": "purple", "value": null}]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 6,
+      "title": "Fuel",
+      "type": "bargauge",
+      "gridPos": {"h": 4, "w": 2, "x": 19, "y": 0},
+      "datasource": {"type": "influxdb", "uid": "influxdb"},
+      "targets": [{
+        "datasource": {"type": "influxdb", "uid": "influxdb"},
+        "refId": "A",
+        "query": "from(bucket: v.defaultBucket)\n  |> range(start: -30s)\n  |> filter(fn: (r) => r._measurement == \"telemetry\" and r._field == \"fuel\")\n  |> last()"
+      }],
+      "options": {
+        "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false},
+        "orientation": "vertical",
+        "displayMode": "lcd",
+        "valueMode": "color",
+        "minVizHeight": 10,
+        "minVizWidth": 0
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "color": {"mode": "thresholds"},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "red", "value": null},
+              {"color": "yellow", "value": 0.2},
+              {"color": "green", "value": 0.4}
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 7,
+      "title": "Boost",
+      "type": "stat",
+      "gridPos": {"h": 4, "w": 3, "x": 21, "y": 0},
+      "datasource": {"type": "influxdb", "uid": "influxdb"},
+      "targets": [{
+        "datasource": {"type": "influxdb", "uid": "influxdb"},
+        "refId": "A",
+        "query": "from(bucket: v.defaultBucket)\n  |> range(start: -30s)\n  |> filter(fn: (r) => r._measurement == \"telemetry\" and r._field == \"boost\")\n  |> last()"
+      }],
+      "options": {
+        "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false},
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "pressurepsi",
+          "decimals": 1,
+          "color": {"mode": "thresholds"},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 15},
+              {"color": "red", "value": 25}
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 8,
+      "title": "Speed",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 4},
+      "datasource": {"type": "influxdb", "uid": "influxdb"},
+      "targets": [{
+        "datasource": {"type": "influxdb", "uid": "influxdb"},
+        "refId": "A",
+        "query": "from(bucket: v.defaultBucket)\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"telemetry\" and r._field == \"speed_kmh\")\n  |> filter(fn: (r) => r.session_id =~ /${session}/)\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)"
+      }],
+      "options": {
+        "tooltip": {"mode": "multi", "sort": "none"},
+        "legend": {"displayMode": "list", "placement": "bottom", "showLegend": false}
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "velocitykmh",
+          "color": {"mode": "fixed", "fixedColor": "cyan"},
+          "custom": {
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 15,
+            "gradientMode": "opacity",
+            "spanNulls": false,
+            "showPoints": "never",
+            "axisPlacement": "auto"
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 9,
+      "title": "Engine RPM",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 4},
+      "datasource": {"type": "influxdb", "uid": "influxdb"},
+      "targets": [{
+        "datasource": {"type": "influxdb", "uid": "influxdb"},
+        "refId": "A",
+        "query": "from(bucket: v.defaultBucket)\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"telemetry\" and r._field == \"engine_rpm\")\n  |> filter(fn: (r) => r.session_id =~ /${session}/)\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)"
+      }],
+      "options": {
+        "tooltip": {"mode": "multi", "sort": "none"},
+        "legend": {"displayMode": "list", "placement": "bottom", "showLegend": false}
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "rotrpm",
+          "color": {"mode": "fixed", "fixedColor": "orange"},
+          "custom": {
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 15,
+            "gradientMode": "opacity",
+            "spanNulls": false,
+            "showPoints": "never",
+            "axisPlacement": "auto"
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 10,
+      "title": "Throttle & Brake",
+      "type": "timeseries",
+      "gridPos": {"h": 7, "w": 24, "x": 0, "y": 12},
+      "datasource": {"type": "influxdb", "uid": "influxdb"},
+      "targets": [
+        {
+          "datasource": {"type": "influxdb", "uid": "influxdb"},
+          "refId": "A",
+          "query": "from(bucket: v.defaultBucket)\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"telemetry\" and r._field == \"throttle_pct\")\n  |> filter(fn: (r) => r.session_id =~ /${session}/)\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)"
+        },
+        {
+          "datasource": {"type": "influxdb", "uid": "influxdb"},
+          "refId": "B",
+          "query": "from(bucket: v.defaultBucket)\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"telemetry\" and r._field == \"brake_pct\")\n  |> filter(fn: (r) => r.session_id =~ /${session}/)\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)"
+        }
+      ],
+      "options": {
+        "tooltip": {"mode": "multi", "sort": "none"},
+        "legend": {"displayMode": "list", "placement": "bottom", "showLegend": true}
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "custom": {
+            "lineInterpolation": "stepAfter",
+            "lineWidth": 1,
+            "fillOpacity": 40,
+            "gradientMode": "none",
+            "spanNulls": false,
+            "showPoints": "never",
+            "axisPlacement": "auto"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {"id": "byFrameRefID", "options": "A"},
+            "properties": [
+              {"id": "displayName", "value": "Throttle"},
+              {"id": "color", "value": {"mode": "fixed", "fixedColor": "green"}}
+            ]
+          },
+          {
+            "matcher": {"id": "byFrameRefID", "options": "B"},
+            "properties": [
+              {"id": "displayName", "value": "Brake"},
+              {"id": "color", "value": {"mode": "fixed", "fixedColor": "red"}}
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 11,
+      "title": "Tire Temperatures",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 19},
+      "datasource": {"type": "influxdb", "uid": "influxdb"},
+      "targets": [
+        {
+          "datasource": {"type": "influxdb", "uid": "influxdb"},
+          "refId": "A",
+          "query": "from(bucket: v.defaultBucket)\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"telemetry\" and r._field == \"tire_temp_fl\")\n  |> filter(fn: (r) => r.session_id =~ /${session}/)\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)"
+        },
+        {
+          "datasource": {"type": "influxdb", "uid": "influxdb"},
+          "refId": "B",
+          "query": "from(bucket: v.defaultBucket)\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"telemetry\" and r._field == \"tire_temp_fr\")\n  |> filter(fn: (r) => r.session_id =~ /${session}/)\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)"
+        },
+        {
+          "datasource": {"type": "influxdb", "uid": "influxdb"},
+          "refId": "C",
+          "query": "from(bucket: v.defaultBucket)\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"telemetry\" and r._field == \"tire_temp_rl\")\n  |> filter(fn: (r) => r.session_id =~ /${session}/)\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)"
+        },
+        {
+          "datasource": {"type": "influxdb", "uid": "influxdb"},
+          "refId": "D",
+          "query": "from(bucket: v.defaultBucket)\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"telemetry\" and r._field == \"tire_temp_rr\")\n  |> filter(fn: (r) => r.session_id =~ /${session}/)\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)"
+        }
+      ],
+      "options": {
+        "tooltip": {"mode": "multi", "sort": "none"},
+        "legend": {"displayMode": "list", "placement": "bottom", "showLegend": true}
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "fahrenheit",
+          "custom": {
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "spanNulls": false,
+            "showPoints": "never"
+          }
+        },
+        "overrides": [
+          {"matcher": {"id": "byFrameRefID", "options": "A"}, "properties": [{"id": "displayName", "value": "FL"}]},
+          {"matcher": {"id": "byFrameRefID", "options": "B"}, "properties": [{"id": "displayName", "value": "FR"}]},
+          {"matcher": {"id": "byFrameRefID", "options": "C"}, "properties": [{"id": "displayName", "value": "RL"}]},
+          {"matcher": {"id": "byFrameRefID", "options": "D"}, "properties": [{"id": "displayName", "value": "RR"}]}
+        ]
+      }
+    },
+    {
+      "id": 12,
+      "title": "Tire Combined Slip",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 19},
+      "datasource": {"type": "influxdb", "uid": "influxdb"},
+      "targets": [
+        {
+          "datasource": {"type": "influxdb", "uid": "influxdb"},
+          "refId": "A",
+          "query": "from(bucket: v.defaultBucket)\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"telemetry\" and r._field == \"tire_combined_slip_fl\")\n  |> filter(fn: (r) => r.session_id =~ /${session}/)\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)"
+        },
+        {
+          "datasource": {"type": "influxdb", "uid": "influxdb"},
+          "refId": "B",
+          "query": "from(bucket: v.defaultBucket)\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"telemetry\" and r._field == \"tire_combined_slip_fr\")\n  |> filter(fn: (r) => r.session_id =~ /${session}/)\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)"
+        },
+        {
+          "datasource": {"type": "influxdb", "uid": "influxdb"},
+          "refId": "C",
+          "query": "from(bucket: v.defaultBucket)\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"telemetry\" and r._field == \"tire_combined_slip_rl\")\n  |> filter(fn: (r) => r.session_id =~ /${session}/)\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)"
+        },
+        {
+          "datasource": {"type": "influxdb", "uid": "influxdb"},
+          "refId": "D",
+          "query": "from(bucket: v.defaultBucket)\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"telemetry\" and r._field == \"tire_combined_slip_rr\")\n  |> filter(fn: (r) => r.session_id =~ /${session}/)\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)"
+        }
+      ],
+      "options": {
+        "tooltip": {"mode": "multi", "sort": "none"},
+        "legend": {"displayMode": "list", "placement": "bottom", "showLegend": true}
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "custom": {
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "spanNulls": false,
+            "showPoints": "never"
+          }
+        },
+        "overrides": [
+          {"matcher": {"id": "byFrameRefID", "options": "A"}, "properties": [{"id": "displayName", "value": "FL"}]},
+          {"matcher": {"id": "byFrameRefID", "options": "B"}, "properties": [{"id": "displayName", "value": "FR"}]},
+          {"matcher": {"id": "byFrameRefID", "options": "C"}, "properties": [{"id": "displayName", "value": "RL"}]},
+          {"matcher": {"id": "byFrameRefID", "options": "D"}, "properties": [{"id": "displayName", "value": "RR"}]}
+        ]
+      }
+    },
+    {
+      "id": 13,
+      "title": "Suspension Travel",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 27},
+      "datasource": {"type": "influxdb", "uid": "influxdb"},
+      "targets": [
+        {
+          "datasource": {"type": "influxdb", "uid": "influxdb"},
+          "refId": "A",
+          "query": "from(bucket: v.defaultBucket)\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"telemetry\" and r._field == \"susp_travel_m_fl\")\n  |> filter(fn: (r) => r.session_id =~ /${session}/)\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)"
+        },
+        {
+          "datasource": {"type": "influxdb", "uid": "influxdb"},
+          "refId": "B",
+          "query": "from(bucket: v.defaultBucket)\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"telemetry\" and r._field == \"susp_travel_m_fr\")\n  |> filter(fn: (r) => r.session_id =~ /${session}/)\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)"
+        },
+        {
+          "datasource": {"type": "influxdb", "uid": "influxdb"},
+          "refId": "C",
+          "query": "from(bucket: v.defaultBucket)\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"telemetry\" and r._field == \"susp_travel_m_rl\")\n  |> filter(fn: (r) => r.session_id =~ /${session}/)\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)"
+        },
+        {
+          "datasource": {"type": "influxdb", "uid": "influxdb"},
+          "refId": "D",
+          "query": "from(bucket: v.defaultBucket)\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"telemetry\" and r._field == \"susp_travel_m_rr\")\n  |> filter(fn: (r) => r.session_id =~ /${session}/)\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)"
+        }
+      ],
+      "options": {
+        "tooltip": {"mode": "multi", "sort": "none"},
+        "legend": {"displayMode": "list", "placement": "bottom", "showLegend": true}
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "lengthm",
+          "custom": {
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "spanNulls": false,
+            "showPoints": "never"
+          }
+        },
+        "overrides": [
+          {"matcher": {"id": "byFrameRefID", "options": "A"}, "properties": [{"id": "displayName", "value": "FL"}]},
+          {"matcher": {"id": "byFrameRefID", "options": "B"}, "properties": [{"id": "displayName", "value": "FR"}]},
+          {"matcher": {"id": "byFrameRefID", "options": "C"}, "properties": [{"id": "displayName", "value": "RL"}]},
+          {"matcher": {"id": "byFrameRefID", "options": "D"}, "properties": [{"id": "displayName", "value": "RR"}]}
+        ]
+      }
+    },
+    {
+      "id": 14,
+      "title": "G-Forces",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 27},
+      "datasource": {"type": "influxdb", "uid": "influxdb"},
+      "targets": [
+        {
+          "datasource": {"type": "influxdb", "uid": "influxdb"},
+          "refId": "A",
+          "query": "from(bucket: v.defaultBucket)\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"telemetry\" and r._field == \"g_lateral\")\n  |> filter(fn: (r) => r.session_id =~ /${session}/)\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)"
+        },
+        {
+          "datasource": {"type": "influxdb", "uid": "influxdb"},
+          "refId": "B",
+          "query": "from(bucket: v.defaultBucket)\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"telemetry\" and r._field == \"g_longitudinal\")\n  |> filter(fn: (r) => r.session_id =~ /${session}/)\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)"
+        },
+        {
+          "datasource": {"type": "influxdb", "uid": "influxdb"},
+          "refId": "C",
+          "query": "from(bucket: v.defaultBucket)\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"telemetry\" and r._field == \"g_vertical\")\n  |> filter(fn: (r) => r.session_id =~ /${session}/)\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)"
+        }
+      ],
+      "options": {
+        "tooltip": {"mode": "multi", "sort": "none"},
+        "legend": {"displayMode": "list", "placement": "bottom", "showLegend": true}
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "custom": {
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 0,
+            "spanNulls": false,
+            "showPoints": "never"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {"id": "byFrameRefID", "options": "A"},
+            "properties": [
+              {"id": "displayName", "value": "Lateral G"},
+              {"id": "color", "value": {"mode": "fixed", "fixedColor": "blue"}}
+            ]
+          },
+          {
+            "matcher": {"id": "byFrameRefID", "options": "B"},
+            "properties": [
+              {"id": "displayName", "value": "Longitudinal G"},
+              {"id": "color", "value": {"mode": "fixed", "fixedColor": "orange"}}
+            ]
+          },
+          {
+            "matcher": {"id": "byFrameRefID", "options": "C"},
+            "properties": [
+              {"id": "displayName", "value": "Vertical G"},
+              {"id": "color", "value": {"mode": "fixed", "fixedColor": "grey"}}
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 15,
+      "title": "Lap Times",
+      "type": "table",
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 35},
+      "datasource": {"type": "influxdb", "uid": "influxdb"},
+      "targets": [{
+        "datasource": {"type": "influxdb", "uid": "influxdb"},
+        "refId": "A",
+        "query": "from(bucket: v.defaultBucket)\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"laps\")\n  |> filter(fn: (r) => r.session_id =~ /${session}/)\n  |> pivot(rowKey: [\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\")\n  |> map(fn: (r) => ({r with lap_time: r.lap_time * 1000.0, best_lap: r.best_lap * 1000.0}))\n  |> sort(columns: [\"lap_number\"], desc: false)"
+      }],
+      "options": {
+        "footer": {"show": false, "reducer": ["sum"], "countRows": false},
+        "showHeader": true,
+        "frameIndex": 0
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "displayMode": "auto",
+            "filterable": true,
+            "minWidth": 80
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "lap_number"},
+            "properties": [
+              {"id": "displayName", "value": "Lap #"},
+              {"id": "custom.width", "value": 70}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "lap_time"},
+            "properties": [
+              {"id": "displayName", "value": "Lap Time"},
+              {"id": "unit", "value": "dtdurationms"},
+              {"id": "custom.displayMode", "value": "color-background"},
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {"color": "green", "value": null},
+                    {"color": "yellow", "value": 60000},
+                    {"color": "orange", "value": 90000},
+                    {"color": "red", "value": 120000}
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "best_lap"},
+            "properties": [
+              {"id": "displayName", "value": "Best Lap"},
+              {"id": "unit", "value": "dtdurationms"}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "max_speed_kmh"},
+            "properties": [
+              {"id": "displayName", "value": "Max Speed"},
+              {"id": "unit", "value": "velocitykmh"},
+              {"id": "decimals", "value": 1}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "distance_traveled"},
+            "properties": [
+              {"id": "displayName", "value": "Distance"},
+              {"id": "unit", "value": "lengthm"},
+              {"id": "decimals", "value": 0}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "session_id"},
+            "properties": [
+              {"id": "displayName", "value": "Session"},
+              {"id": "custom.width", "value": 90}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "estimated"},
+            "properties": [
+              {"id": "displayName", "value": "Estimated"},
+              {"id": "custom.width", "value": 90},
+              {"id": "custom.displayMode", "value": "color-background"},
+              {
+                "id": "mappings",
+                "value": [
+                  {"type": "value", "options": {"true": {"text": "estimated", "color": "orange"}, "false": {"text": "confirmed", "color": "green"}}}
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "dirty"},
+            "properties": [
+              {"id": "displayName", "value": "Dirty"},
+              {"id": "custom.width", "value": 75},
+              {"id": "custom.displayMode", "value": "color-background"},
+              {
+                "id": "mappings",
+                "value": [
+                  {"type": "value", "options": {"true": {"text": "rewind", "color": "red"}, "false": {"text": "clean", "color": "green"}}}
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "max_g_lat"},
+            "properties": [
+              {"id": "displayName", "value": "Max Lat G"},
+              {"id": "unit", "value": "none"},
+              {"id": "decimals", "value": 2},
+              {"id": "custom.width", "value": 95}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "max_g_lon"},
+            "properties": [
+              {"id": "displayName", "value": "Max Lon G"},
+              {"id": "unit", "value": "none"},
+              {"id": "decimals", "value": 2},
+              {"id": "custom.width", "value": 95}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "avg_throttle"},
+            "properties": [
+              {"id": "displayName", "value": "Avg Throttle"},
+              {"id": "unit", "value": "percent"},
+              {"id": "decimals", "value": 0},
+              {"id": "custom.width", "value": 110}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "avg_brake"},
+            "properties": [
+              {"id": "displayName", "value": "Avg Brake"},
+              {"id": "unit", "value": "percent"},
+              {"id": "decimals", "value": 0},
+              {"id": "custom.width", "value": 100}
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 16,
+      "title": "Traction Circle",
+      "description": "G-G plot: lateral G (cornering) vs longitudinal G (acceleration/braking). Tighter cluster near the edge = consistent grip usage.",
+      "type": "xychart",
+      "gridPos": {"h": 9, "w": 12, "x": 0, "y": 43},
+      "datasource": {"type": "influxdb", "uid": "influxdb"},
+      "targets": [{
+        "datasource": {"type": "influxdb", "uid": "influxdb"},
+        "refId": "A",
+        "query": "from(bucket: v.defaultBucket)\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"telemetry\" and (r._field == \"g_lateral\" or r._field == \"g_longitudinal\"))\n  |> filter(fn: (r) => r.session_id =~ /${session}/)\n  |> pivot(rowKey: [\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\")\n  |> keep(columns: [\"_time\", \"g_lateral\", \"g_longitudinal\"])"
+      }],
+      "options": {
+        "mapping": "auto",
+        "tooltip": {"mode": "single", "sort": "none"},
+        "legend": {"displayMode": "hidden", "placement": "bottom", "showLegend": false}
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "fixed", "fixedColor": "orange"},
+          "custom": {
+            "pointSize": 2,
+            "lineWidth": 0,
+            "fillOpacity": 50
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "g_lateral"},
+            "properties": [
+              {"id": "displayName", "value": "Lateral G (cornering)"},
+              {"id": "custom.axisLabel", "value": "← Left    Lateral G    Right →"}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "g_longitudinal"},
+            "properties": [
+              {"id": "displayName", "value": "Longitudinal G (accel/brake)"},
+              {"id": "custom.axisLabel", "value": "← Brake    Longitudinal G    Accel →"}
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 17,
+      "title": "Track Map",
+      "description": "Top-down position trace. Each dot is a GPS sample. Shows your racing line across the session time range.",
+      "type": "xychart",
+      "gridPos": {"h": 9, "w": 12, "x": 12, "y": 43},
+      "datasource": {"type": "influxdb", "uid": "influxdb"},
+      "targets": [{
+        "datasource": {"type": "influxdb", "uid": "influxdb"},
+        "refId": "A",
+        "query": "from(bucket: v.defaultBucket)\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"telemetry\" and (r._field == \"pos_x\" or r._field == \"pos_z\"))\n  |> filter(fn: (r) => r.session_id =~ /${session}/)\n  |> pivot(rowKey: [\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\")\n  |> keep(columns: [\"_time\", \"pos_x\", \"pos_z\"])"
+      }],
+      "options": {
+        "mapping": "auto",
+        "tooltip": {"mode": "none", "sort": "none"},
+        "legend": {"displayMode": "hidden", "placement": "bottom", "showLegend": false}
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "fixed", "fixedColor": "cyan"},
+          "custom": {
+            "pointSize": 2,
+            "lineWidth": 0,
+            "fillOpacity": 70
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {"id": "byName", "options": "pos_x"},
+            "properties": [
+              {"id": "displayName", "value": "X (East-West)"},
+              {"id": "unit", "value": "lengthm"}
+            ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "pos_z"},
+            "properties": [
+              {"id": "displayName", "value": "Z (North-South)"},
+              {"id": "unit", "value": "lengthm"}
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 18,
+      "title": "Lap Time Trend",
+      "description": "Each dot = one completed lap. Shows consistency over the session. Green line = session best lap.",
+      "type": "timeseries",
+      "gridPos": {"h": 7, "w": 12, "x": 0, "y": 52},
+      "datasource": {"type": "influxdb", "uid": "influxdb"},
+      "targets": [
+        {
+          "datasource": {"type": "influxdb", "uid": "influxdb"},
+          "refId": "A",
+          "query": "from(bucket: v.defaultBucket)\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"laps\" and r._field == \"lap_time\")\n  |> filter(fn: (r) => r.session_id =~ /${session}/)\n  |> map(fn: (r) => ({r with _value: r._value * 1000.0}))"
+        },
+        {
+          "datasource": {"type": "influxdb", "uid": "influxdb"},
+          "refId": "B",
+          "query": "from(bucket: v.defaultBucket)\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"laps\" and r._field == \"best_lap\")\n  |> filter(fn: (r) => r.session_id =~ /${session}/)\n  |> map(fn: (r) => ({r with _value: r._value * 1000.0}))"
+        }
+      ],
+      "options": {
+        "tooltip": {"mode": "multi", "sort": "none"},
+        "legend": {"displayMode": "list", "placement": "bottom", "showLegend": true}
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "dtdurationms",
+          "custom": {
+            "lineInterpolation": "stepAfter",
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "spanNulls": false,
+            "showPoints": "always",
+            "pointSize": 10,
+            "axisPlacement": "auto"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {"id": "byFrameRefID", "options": "A"},
+            "properties": [
+              {"id": "displayName", "value": "Lap Time"},
+              {"id": "color", "value": {"mode": "fixed", "fixedColor": "cyan"}}
+            ]
+          },
+          {
+            "matcher": {"id": "byFrameRefID", "options": "B"},
+            "properties": [
+              {"id": "displayName", "value": "Session Best"},
+              {"id": "color", "value": {"mode": "fixed", "fixedColor": "green"}}
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 19,
+      "title": "Steering & G-Forces",
+      "description": "Overlay of steering input vs lateral/longitudinal G. Alignment between steering and lateral G reveals understeer (steering ahead of G) or oversteer (G ahead of steering).",
+      "type": "timeseries",
+      "gridPos": {"h": 7, "w": 12, "x": 12, "y": 52},
+      "datasource": {"type": "influxdb", "uid": "influxdb"},
+      "targets": [
+        {
+          "datasource": {"type": "influxdb", "uid": "influxdb"},
+          "refId": "A",
+          "query": "from(bucket: v.defaultBucket)\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"telemetry\" and r._field == \"steer_norm\")\n  |> filter(fn: (r) => r.session_id =~ /${session}/)\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)"
+        },
+        {
+          "datasource": {"type": "influxdb", "uid": "influxdb"},
+          "refId": "B",
+          "query": "from(bucket: v.defaultBucket)\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"telemetry\" and r._field == \"g_lateral\")\n  |> filter(fn: (r) => r.session_id =~ /${session}/)\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)"
+        },
+        {
+          "datasource": {"type": "influxdb", "uid": "influxdb"},
+          "refId": "C",
+          "query": "from(bucket: v.defaultBucket)\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"telemetry\" and r._field == \"g_longitudinal\")\n  |> filter(fn: (r) => r.session_id =~ /${session}/)\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)"
+        }
+      ],
+      "options": {
+        "tooltip": {"mode": "multi", "sort": "none"},
+        "legend": {"displayMode": "list", "placement": "bottom", "showLegend": true}
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "custom": {
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 0,
+            "spanNulls": false,
+            "showPoints": "never",
+            "axisPlacement": "auto"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {"id": "byFrameRefID", "options": "A"},
+            "properties": [
+              {"id": "displayName", "value": "Steering"},
+              {"id": "color", "value": {"mode": "fixed", "fixedColor": "yellow"}}
+            ]
+          },
+          {
+            "matcher": {"id": "byFrameRefID", "options": "B"},
+            "properties": [
+              {"id": "displayName", "value": "Lateral G"},
+              {"id": "color", "value": {"mode": "fixed", "fixedColor": "blue"}}
+            ]
+          },
+          {
+            "matcher": {"id": "byFrameRefID", "options": "C"},
+            "properties": [
+              {"id": "displayName", "value": "Longitudinal G"},
+              {"id": "color", "value": {"mode": "fixed", "fixedColor": "red"}}
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "refresh": "5s",
+  "schemaVersion": 39,
+  "tags": ["forza", "pitlane", "telemetry"],
+  "templating": {
+    "list": [
+      {
+        "current": {},
+        "datasource": {"type": "influxdb", "uid": "influxdb"},
+        "definition": "import \"influxdata/influxdb/schema\"\nschema.tagValues(\n  bucket: \"forza\",\n  tag: \"session_id\",\n  predicate: (r) => r._measurement == \"telemetry\",\n  start: -30d\n)",
+        "hide": 0,
+        "includeAll": true,
+        "multi": false,
+        "name": "session",
+        "label": "Session",
+        "options": [],
+        "query": "import \"influxdata/influxdb/schema\"\nschema.tagValues(\n  bucket: \"forza\",\n  tag: \"session_id\",\n  predicate: (r) => r._measurement == \"telemetry\",\n  start: -30d\n)",
+        "refresh": 2,
+        "regex": "",
+        "sort": 5,
+        "type": "query",
+        "allValue": ".*"
+      }
+    ]
+  },
+  "time": {"from": "now-3h", "to": "now"},
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "🏕️ Forza Telemetry",
+  "uid": "forza-telemetry",
+  "version": 2
+}

@@ -1,0 +1,1083 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🏁 PitLane</title>
+<style>
+/* ── Reset & base ─────────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:        #07070f;
+  --surface:   #0e0e1c;
+  --surface2:  #13132a;
+  --border:    #1e1e3a;
+  --primary:   #00d4ff;
+  --orange:    #ff6b00;
+  --green:     #00ff87;
+  --gold:      #ffd700;
+  --red:       #ff3b3b;
+  --purple:    #9d4edd;
+  --text:      #e8e8ff;
+  --muted:     #55558a;
+  --font-mono: 'Courier New', Courier, monospace;
+  --font-ui:   -apple-system, 'Segoe UI', Arial, sans-serif;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-ui);
+  height: 100dvh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Header ───────────────────────────────────────────────────────────────── */
+#header {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 0 16px;
+  height: 48px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+#header .logo { font-size: 1.1rem; font-weight: 700; letter-spacing: 3px; color: var(--primary); }
+#header .logo span { color: var(--muted); font-weight: 400; }
+#session-info { font-size: 0.75rem; color: var(--muted); flex: 1; }
+#session-info b { color: var(--text); }
+#live-badge {
+  font-size: 0.7rem; font-weight: 700; letter-spacing: 2px;
+  padding: 3px 10px; border-radius: 3px;
+  background: var(--border); color: var(--muted);
+  border: 1px solid transparent;
+  transition: all 0.3s;
+}
+#live-badge.live  { background: rgba(0,255,135,0.15); color: var(--green);  border-color: var(--green); }
+#live-badge.menu  { background: rgba(255,107,0,0.15); color: var(--orange); border-color: var(--orange); }
+#live-badge.live::before, #live-badge.menu::before { content: '● '; }
+#grafana-link {
+  font-size: 0.7rem; color: var(--muted); text-decoration: none;
+  padding: 4px 10px; border: 1px solid var(--border); border-radius: 3px;
+}
+#grafana-link:hover { color: var(--primary); border-color: var(--primary); }
+
+/* ── Dashboard grid ───────────────────────────────────────────────────────── */
+#dash {
+  display: grid;
+  grid-template-columns: 280px 140px 1fr 1fr 200px 260px;
+  grid-template-rows: 1fr auto auto 80px;
+  grid-template-areas:
+    "speed  gear    laptime bestlap gforce  map"
+    "speed  rpm     rpm     rpm     gforce  map"
+    "inputs inputs  tires   tires   tires   map"
+    "history history history history history history";
+  gap: 8px;
+  padding: 8px;
+  flex: 1;
+  min-height: 0;
+}
+
+/* ── Cards ────────────────────────────────────────────────────────────────── */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 10px;
+  overflow: hidden;
+  position: relative;
+}
+.card-label {
+  font-size: 0.6rem; letter-spacing: 2px; text-transform: uppercase;
+  color: var(--muted); margin-bottom: 4px; align-self: flex-start;
+}
+
+/* ── Speed gauge ──────────────────────────────────────────────────────────── */
+.card-speed { grid-area: speed; }
+#speed-svg { width: 100%; max-width: 240px; }
+#speed-value {
+  font: 700 3.2rem/1 var(--font-mono);
+  fill: var(--text); text-anchor: middle; dominant-baseline: middle;
+}
+#speed-unit { font: 400 0.75rem var(--font-ui); fill: var(--muted); text-anchor: middle; }
+#speed-arc-bg  { stroke: var(--surface2); stroke-width: 14; fill: none; }
+#speed-arc-val { stroke: var(--primary); stroke-width: 14; fill: none;
+                 stroke-linecap: round; }
+.speed-tick { stroke: var(--border); stroke-width: 1.5; }
+.speed-tick-label { fill: var(--muted); font: 0.55rem var(--font-mono); text-anchor: middle; }
+
+/* ── Gear ─────────────────────────────────────────────────────────────────── */
+.card-gear { grid-area: gear; }
+#gear-value {
+  font: 900 4.5rem/1 var(--font-mono);
+  color: var(--text);
+  text-shadow: 0 0 30px rgba(0,212,255,0.4);
+  transition: color 0.1s;
+}
+#gear-value.neutral { color: var(--muted); }
+#car-class {
+  font-size: 0.7rem; letter-spacing: 3px; color: var(--muted); margin-top: 4px;
+}
+
+/* ── Lap time ─────────────────────────────────────────────────────────────── */
+.card-laptime { grid-area: laptime; }
+.card-bestlap { grid-area: bestlap; }
+.lap-big {
+  font: 700 2.2rem/1 var(--font-mono);
+  color: var(--text); letter-spacing: 1px;
+  transition: color 0.2s;
+}
+.lap-big.new-best { color: var(--gold); text-shadow: 0 0 20px rgba(255,215,0,0.5); }
+.lap-sub { font-size: 0.7rem; color: var(--muted); margin-top: 6px; }
+.card-bestlap .lap-big { color: var(--green); }
+
+/* ── RPM bar ──────────────────────────────────────────────────────────────── */
+.card-rpm { grid-area: rpm; flex-direction: column; align-items: stretch; padding: 8px 14px; }
+.rpm-header {
+  display: flex; justify-content: space-between;
+  font: 0.6rem var(--font-mono); color: var(--muted);
+  margin-bottom: 6px; letter-spacing: 1px;
+}
+#rpm-value-text { color: var(--orange); font-weight: 700; }
+.rpm-track {
+  height: 18px; background: var(--surface2); border-radius: 3px; overflow: hidden;
+  position: relative;
+}
+.rpm-fill {
+  height: 100%; width: 0%; border-radius: 3px;
+  background: linear-gradient(to right, var(--primary) 0%, var(--orange) 75%, var(--red) 92%);
+  position: relative;
+}
+.rpm-redline {
+  position: absolute; right: 10%; top: 0; bottom: 0; width: 1px;
+  background: rgba(255,59,59,0.4);
+}
+
+/* ── G-force circle ───────────────────────────────────────────────────────── */
+.card-gforce { grid-area: gforce; }
+#gforce-svg { width: 100%; max-width: 190px; }
+.g-ring { fill: none; stroke: var(--border); stroke-width: 0.8; }
+.g-ring-1g { stroke: var(--surface2); stroke-width: 1.2; }
+.g-axis { stroke: var(--border); stroke-width: 0.6; }
+.g-label { fill: var(--muted); font: 0.45rem var(--font-mono); text-anchor: middle; }
+#g-dot { fill: var(--primary); filter: drop-shadow(0 0 4px var(--primary)); transition: cx 0.1s, cy 0.1s; }
+.g-trail-dot { fill: var(--primary); opacity: 0.15; }
+
+/* ── Inputs (throttle / brake / boost / fuel) ─────────────────────────────── */
+.card-inputs {
+  grid-area: inputs;
+  flex-direction: row;
+  gap: 10px;
+  padding: 10px 14px;
+  align-items: stretch;
+  justify-content: flex-start;
+}
+.input-group { display: flex; flex-direction: column; gap: 6px; min-width: 120px; }
+.input-row { display: flex; align-items: center; gap: 8px; }
+.input-lbl { font: 0.6rem var(--font-mono); color: var(--muted); width: 28px; letter-spacing: 1px; }
+.input-bar-wrap { flex: 1; height: 12px; background: var(--surface2); border-radius: 2px; overflow: hidden; }
+.input-bar { height: 100%; width: 0%; border-radius: 2px; }
+.bar-thr { background: var(--green); }
+.bar-brk { background: var(--red); }
+.bar-boost { background: var(--orange); }
+.bar-fuel  { background: var(--primary); }
+.input-pct { font: 0.6rem var(--font-mono); color: var(--muted); width: 30px; text-align: right; }
+
+/* ── Tyre grid ────────────────────────────────────────────────────────────── */
+.card-tires {
+  grid-area: tires;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 10px;
+}
+.tires-label {
+  font-size: 0.6rem; letter-spacing: 2px; color: var(--muted);
+  text-transform: uppercase; align-self: flex-start;
+}
+.tires-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 5px;
+  width: 100%;
+  flex: 1;
+  min-height: 0;
+}
+
+.tire-cell {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 5px 6px 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  align-items: stretch;
+}
+
+/* Donut SVG */
+.tire-donut { display: block; width: 100%; max-width: 120px; margin: 0 auto; }
+.donut-bg   { fill: none; stroke: #1e1e3a; stroke-width: 10; }
+.donut-arc  { fill: none; stroke-width: 10; stroke-linecap: round; transition: stroke 0.3s; }
+.donut-temp {
+  font-size: 19px; font-weight: 700; font-family: 'Courier New', monospace;
+  text-anchor: middle; dominant-baseline: middle;
+  transition: fill 0.3s;
+}
+.donut-sub {
+  font-size: 9px; font-family: 'Courier New', monospace;
+  fill: #55558a; text-anchor: middle; dominant-baseline: middle;
+}
+
+/* Tyre info row: corner label | suspension bar | slip angle */
+.tire-info-row {
+  display: flex; align-items: center; gap: 5px; padding: 0 2px;
+}
+.tire-corner-lbl {
+  font: 600 0.58rem var(--font-mono); color: var(--muted);
+  letter-spacing: 1px; min-width: 18px;
+}
+.tire-susp-wrap {
+  flex: 1; height: 4px; background: var(--border);
+  border-radius: 2px; overflow: hidden;
+}
+.tire-susp-fill {
+  height: 100%; width: 50%; background: var(--primary);
+  border-radius: 2px; transition: width 0.2s, background 0.3s;
+}
+.tire-angle-val {
+  font: 0.56rem var(--font-mono); color: var(--muted);
+  min-width: 38px; text-align: right;
+}
+.tires-note {
+  font-size: 0.55rem; color: var(--border); letter-spacing: 1px;
+  text-align: right; margin-top: 1px; align-self: flex-end;
+}
+
+/* ── Live Track Map ───────────────────────────────────────────────────────── */
+.card-map {
+  grid-area: map;
+  padding: 8px;
+  gap: 4px;
+  align-items: stretch;
+  justify-content: flex-start;
+}
+.card-map .card-label { margin-bottom: 2px; }
+#track-canvas-wrap {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  width: 100%;
+  border-radius: 4px;
+  overflow: hidden;
+  background: var(--bg);
+}
+#track-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.track-legend {
+  display: flex; justify-content: space-between; align-items: center;
+  font: 0.55rem var(--font-mono); color: var(--muted); margin-top: 3px;
+  padding: 0 2px;
+}
+.track-legend-bar {
+  flex: 1; height: 3px; border-radius: 2px; margin: 0 6px;
+  background: linear-gradient(to right, hsl(240,90%,55%), hsl(120,90%,55%), hsl(60,90%,55%), hsl(0,90%,55%));
+}
+
+/* ── Lap history ──────────────────────────────────────────────────────────── */
+.card-history { grid-area: history; flex-direction: column; align-items: stretch; padding: 0; overflow: hidden; }
+.history-header {
+  display: flex; gap: 0; border-bottom: 1px solid var(--border);
+  font: 0.6rem var(--font-mono); color: var(--muted); letter-spacing: 1px;
+  padding: 5px 12px;
+  text-transform: uppercase;
+}
+.history-header div { flex: 1; }
+.history-header .h-lap { flex: 0 0 50px; }
+.history-header .h-sess { flex: 0 0 80px; }
+#lap-rows { overflow-y: auto; flex: 1; }
+.lap-row {
+  display: flex; gap: 0; align-items: center;
+  padding: 4px 12px;
+  border-bottom: 1px solid rgba(30,30,58,0.5);
+  font: 0.75rem var(--font-mono);
+}
+.lap-row div { flex: 1; }
+.lap-row .h-lap  { flex: 0 0 50px; color: var(--muted); }
+.lap-row .h-sess { flex: 0 0 80px; color: var(--muted); font-size: 0.6rem; }
+.lap-row.best-lap { background: rgba(255,215,0,0.06); }
+.lap-row.best-lap .lap-time-val { color: var(--gold); font-weight: 700; }
+.lap-badge {
+  font-size: 0.55rem; padding: 1px 5px; border-radius: 2px; margin-left: 6px;
+  font-family: var(--font-ui);
+}
+.badge-est   { background: rgba(255,107,0,0.2);  color: var(--orange); }
+.badge-dirty { background: rgba(255,59,59,0.2);  color: var(--red); }
+.badge-best  { background: rgba(255,215,0,0.2);  color: var(--gold); }
+
+/* ── Offline overlay ──────────────────────────────────────────────────────── */
+#offline-overlay {
+  position: fixed; inset: 0; z-index: 100;
+  background: rgba(7,7,15,0.85);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 12px;
+  opacity: 0; pointer-events: none;
+  transition: opacity 0.4s;
+}
+#offline-overlay.visible { opacity: 1; pointer-events: auto; }
+#offline-overlay .msg {
+  font-size: 1rem; color: var(--muted); letter-spacing: 3px; text-transform: uppercase;
+}
+#offline-overlay .sub { font-size: 0.75rem; color: var(--border); }
+.pulse-ring {
+  width: 60px; height: 60px; border-radius: 50%;
+  border: 2px solid var(--muted);
+  animation: pulse 2s ease-in-out infinite;
+}
+@keyframes pulse {
+  0%,100% { transform: scale(1); opacity: 0.5; }
+  50%      { transform: scale(1.3); opacity: 0.1; }
+}
+</style>
+</head>
+<body>
+
+<!-- ── Header ──────────────────────────────────────────────────────────────── -->
+<div id="header">
+  <div class="logo">PIT<span>LANE</span></div>
+  <div id="session-info">Session <b id="hdr-session">—</b> &nbsp;·&nbsp; <b id="hdr-car">—</b></div>
+  <div id="live-badge">OFFLINE</div>
+  <a href="/analytics.html" style="font-size:0.7rem;color:var(--muted);text-decoration:none;padding:4px 10px;border:1px solid var(--border);border-radius:3px;">Analytics</a>
+  <a id="grafana-link" href="http://localhost:3000" target="_blank">Grafana ↗</a>
+</div>
+
+<!-- ── Dashboard ───────────────────────────────────────────────────────────── -->
+<div id="dash">
+
+  <!-- Speed gauge -->
+  <div class="card card-speed">
+    <svg id="speed-svg" viewBox="0 0 220 220" xmlns="http://www.w3.org/2000/svg">
+      <circle id="speed-arc-bg" cx="110" cy="110" r="90"
+        stroke-dasharray="424 142"
+        transform="rotate(135 110 110)"/>
+      <circle id="speed-arc-val" cx="110" cy="110" r="90"
+        stroke-dasharray="0 566"
+        transform="rotate(135 110 110)"/>
+      <g id="speed-ticks"></g>
+      <text id="speed-value" x="110" y="102">0</text>
+      <text id="speed-unit"  x="110" y="128">km/h</text>
+      <rect x="30" y="150" width="160" height="6" rx="3" fill="#13132a"/>
+      <rect id="rpm-mini" x="30" y="150" width="0" height="6" rx="3" fill="#ff6b00"/>
+      <text x="110" y="170" text-anchor="middle" fill="#55558a" font-size="8" font-family="monospace">
+        <tspan id="rpm-mini-text">0</tspan> rpm
+      </text>
+    </svg>
+  </div>
+
+  <!-- Gear -->
+  <div class="card card-gear">
+    <div class="card-label">GEAR</div>
+    <div id="gear-value" class="neutral">N</div>
+    <div id="car-class">—</div>
+  </div>
+
+  <!-- Current lap -->
+  <div class="card card-laptime">
+    <div class="card-label">CURRENT LAP</div>
+    <div id="cur-lap" class="lap-big">0:00.000</div>
+    <div class="lap-sub">Lap <span id="lap-num">—</span></div>
+  </div>
+
+  <!-- Best lap -->
+  <div class="card card-bestlap">
+    <div class="card-label">BEST LAP</div>
+    <div id="best-lap" class="lap-big">—:——.———</div>
+    <div class="lap-sub" id="best-lap-sub"></div>
+  </div>
+
+  <!-- G-force -->
+  <div class="card card-gforce">
+    <div class="card-label">G-FORCE</div>
+    <svg id="gforce-svg" viewBox="0 0 180 180" xmlns="http://www.w3.org/2000/svg">
+      <circle class="g-ring" cx="90" cy="90" r="65"/>
+      <circle class="g-ring-1g" cx="90" cy="90" r="44"/>
+      <circle class="g-ring" cx="90" cy="90" r="22"/>
+      <line class="g-axis" x1="90" y1="20" x2="90" y2="160"/>
+      <line class="g-axis" x1="20" y1="90" x2="160" y2="90"/>
+      <text class="g-label" x="90" y="16">+A</text>
+      <text class="g-label" x="90" y="168">−A</text>
+      <text class="g-label" x="14" y="93">L</text>
+      <text class="g-label" x="163" y="93">R</text>
+      <text class="g-label" x="141" y="51">1G</text>
+      <g id="g-trail"></g>
+      <circle id="g-dot" cx="90" cy="90" r="5"/>
+    </svg>
+    <div style="font:0.6rem var(--font-mono);color:var(--muted);margin-top:2px">
+      Lat <span id="g-lat-val" style="color:var(--primary)">0.00</span>
+      &nbsp;Lon <span id="g-lon-val" style="color:var(--orange)">0.00</span>
+    </div>
+  </div>
+
+  <!-- RPM bar -->
+  <div class="card card-rpm">
+    <div class="rpm-header">
+      <span>RPM</span>
+      <span id="rpm-value-text">0</span>
+    </div>
+    <div class="rpm-track">
+      <div id="rpm-fill" class="rpm-fill"></div>
+      <div class="rpm-redline"></div>
+    </div>
+  </div>
+
+  <!-- Inputs -->
+  <div class="card card-inputs">
+    <div class="input-group">
+      <div class="card-label" style="margin-bottom:2px">INPUTS</div>
+      <div class="input-row">
+        <span class="input-lbl">THR</span>
+        <div class="input-bar-wrap"><div id="bar-thr" class="input-bar bar-thr"></div></div>
+        <span class="input-pct" id="pct-thr">0%</span>
+      </div>
+      <div class="input-row">
+        <span class="input-lbl">BRK</span>
+        <div class="input-bar-wrap"><div id="bar-brk" class="input-bar bar-brk"></div></div>
+        <span class="input-pct" id="pct-brk">0%</span>
+      </div>
+      <div class="input-row">
+        <span class="input-lbl">BST</span>
+        <div class="input-bar-wrap"><div id="bar-boost" class="input-bar bar-boost"></div></div>
+        <span class="input-pct" id="pct-boost">0 psi</span>
+      </div>
+      <div class="input-row">
+        <span class="input-lbl">FUEL</span>
+        <div class="input-bar-wrap"><div id="bar-fuel" class="input-bar bar-fuel"></div></div>
+        <span class="input-pct" id="pct-fuel">0%</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tyre grid -->
+  <div class="card card-tires">
+    <div class="tires-label">TYRES — °C · Slip · Suspension · Angle</div>
+    <div class="tires-grid">
+
+      <!-- FL -->
+      <div class="tire-cell" id="tire-fl">
+        <svg class="tire-donut" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+          <circle class="donut-bg" cx="50" cy="50" r="38"/>
+          <circle class="donut-arc" id="tfl-arc" cx="50" cy="50" r="38"
+            stroke="#4fc3f7" stroke-dasharray="0 238.8"
+            transform="rotate(-90 50 50)"/>
+          <text class="donut-temp" id="tfl-temp" x="50" y="46" fill="#4fc3f7">—°</text>
+          <text class="donut-sub"  id="tfl-slip" x="50" y="62">cold</text>
+        </svg>
+        <div class="tire-info-row">
+          <span class="tire-corner-lbl">FL</span>
+          <div class="tire-susp-wrap"><div class="tire-susp-fill" id="tfl-susp"></div></div>
+          <span class="tire-angle-val" id="tfl-angle">—</span>
+        </div>
+      </div>
+
+      <!-- FR -->
+      <div class="tire-cell" id="tire-fr">
+        <svg class="tire-donut" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+          <circle class="donut-bg" cx="50" cy="50" r="38"/>
+          <circle class="donut-arc" id="tfr-arc" cx="50" cy="50" r="38"
+            stroke="#4fc3f7" stroke-dasharray="0 238.8"
+            transform="rotate(-90 50 50)"/>
+          <text class="donut-temp" id="tfr-temp" x="50" y="46" fill="#4fc3f7">—°</text>
+          <text class="donut-sub"  id="tfr-slip" x="50" y="62">cold</text>
+        </svg>
+        <div class="tire-info-row">
+          <span class="tire-corner-lbl">FR</span>
+          <div class="tire-susp-wrap"><div class="tire-susp-fill" id="tfr-susp"></div></div>
+          <span class="tire-angle-val" id="tfr-angle">—</span>
+        </div>
+      </div>
+
+      <!-- RL -->
+      <div class="tire-cell" id="tire-rl">
+        <svg class="tire-donut" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+          <circle class="donut-bg" cx="50" cy="50" r="38"/>
+          <circle class="donut-arc" id="trl-arc" cx="50" cy="50" r="38"
+            stroke="#4fc3f7" stroke-dasharray="0 238.8"
+            transform="rotate(-90 50 50)"/>
+          <text class="donut-temp" id="trl-temp" x="50" y="46" fill="#4fc3f7">—°</text>
+          <text class="donut-sub"  id="trl-slip" x="50" y="62">cold</text>
+        </svg>
+        <div class="tire-info-row">
+          <span class="tire-corner-lbl">RL</span>
+          <div class="tire-susp-wrap"><div class="tire-susp-fill" id="trl-susp"></div></div>
+          <span class="tire-angle-val" id="trl-angle">—</span>
+        </div>
+      </div>
+
+      <!-- RR -->
+      <div class="tire-cell" id="tire-rr">
+        <svg class="tire-donut" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+          <circle class="donut-bg" cx="50" cy="50" r="38"/>
+          <circle class="donut-arc" id="trr-arc" cx="50" cy="50" r="38"
+            stroke="#4fc3f7" stroke-dasharray="0 238.8"
+            transform="rotate(-90 50 50)"/>
+          <text class="donut-temp" id="trr-temp" x="50" y="46" fill="#4fc3f7">—°</text>
+          <text class="donut-sub"  id="trr-slip" x="50" y="62">cold</text>
+        </svg>
+        <div class="tire-info-row">
+          <span class="tire-corner-lbl">RR</span>
+          <div class="tire-susp-wrap"><div class="tire-susp-fill" id="trr-susp"></div></div>
+          <span class="tire-angle-val" id="trr-angle">—</span>
+        </div>
+      </div>
+
+    </div>
+    <div class="tires-note">PSI — not in Forza telemetry protocol</div>
+  </div>
+
+  <!-- Live track map -->
+  <div class="card card-map">
+    <div class="card-label">TRACK MAP</div>
+    <div id="track-canvas-wrap">
+      <canvas id="track-canvas"></canvas>
+    </div>
+    <div class="track-legend">
+      <span>slow</span>
+      <div class="track-legend-bar"></div>
+      <span>fast</span>
+    </div>
+  </div>
+
+  <!-- Lap history -->
+  <div class="card card-history">
+    <div class="history-header">
+      <div class="h-lap">#</div>
+      <div class="h-sess">SESSION</div>
+      <div>LAP TIME</div>
+      <div>MAX SPEED</div>
+      <div>FLAGS</div>
+    </div>
+    <div id="lap-rows"></div>
+  </div>
+</div>
+
+<!-- Offline overlay -->
+<div id="offline-overlay">
+  <div class="pulse-ring"></div>
+  <div class="msg">Waiting for telemetry</div>
+  <div class="sub">Enable Data Out in Forza settings → set IP to this machine, port 5300, format Car Dash</div>
+</div>
+
+<script>
+// ── Constants ──────────────────────────────────────────────────────────────────
+const MAX_SPEED   = 350;
+const MAX_BOOST   = 30;
+const G_SCALE     = 44;
+const G_CENTER    = 90;
+const MAX_TRAIL   = 60;
+const LAPS_POLL   = 4000;
+const DONUT_CIRC  = 2 * Math.PI * 38;   // ≈238.76 — circumference of donut ring
+
+// Speed gauge geometry
+const R = 90, CX = 110, CY = 110;
+const CIRC = 2 * Math.PI * R;
+const ARC  = CIRC * (270 / 360);
+
+// ── EMA smoothing ──────────────────────────────────────────────────────────────
+const EMA = {
+  speed:   { v: 0, a: 0.35 },
+  rpm:     { v: 0, a: 0.45 },
+  gLat:    { v: 0, a: 0.30 },
+  gLon:    { v: 0, a: 0.30 },
+  thr:     { v: 0, a: 0.55 },
+  brk:     { v: 0, a: 0.55 },
+  boost:   { v: 0, a: 0.40 },
+  // Tyre combined slip (spiky — smooth more)
+  slipFL:  { v: 0, a: 0.28 },
+  slipFR:  { v: 0, a: 0.28 },
+  slipRL:  { v: 0, a: 0.28 },
+  slipRR:  { v: 0, a: 0.28 },
+  // Suspension travel (medium speed changes)
+  suspFL:  { v: 0.5, a: 0.22 },
+  suspFR:  { v: 0.5, a: 0.22 },
+  suspRL:  { v: 0.5, a: 0.22 },
+  suspRR:  { v: 0.5, a: 0.22 },
+};
+function smooth(key, raw) {
+  const s = EMA[key];
+  s.v = s.a * raw + (1 - s.a) * s.v;
+  return s.v;
+}
+
+// ── State ──────────────────────────────────────────────────────────────────────
+let gTrail      = [];
+let bestLapSeen = Infinity;
+
+// Track map state
+const TRACK_MAX_PTS = 8000;     // ~4.4 min at 30Hz
+let trackCurLap  = [];          // {x, z, spd}
+let trackPrevLap = [];
+let trackBounds  = null;        // {minX, maxX, minZ, maxZ} — only expands
+let trackLastLap = -1;
+let trackYaw     = 0;
+
+// ── Helpers ────────────────────────────────────────────────────────────────────
+function fmtTime(s) {
+  if (s == null || s <= 0) return '—:——.———';
+  const m  = Math.floor(s / 60);
+  const ss = Math.floor(s % 60);
+  const ms = Math.round((s % 1) * 1000);
+  return `${m}:${String(ss).padStart(2,'0')}.${String(ms).padStart(3,'0')}`;
+}
+function clamp(v, lo, hi) { return Math.min(Math.max(v, lo), hi); }
+
+// ── Speed gauge ────────────────────────────────────────────────────────────────
+function buildSpeedTicks() {
+  const g = document.getElementById('speed-ticks');
+  [0,50,100,150,200,250,300,350].forEach(v => {
+    const angle = (135 + (v / MAX_SPEED) * 270) * Math.PI / 180;
+    const r1 = R + 8, r2 = R + 16;
+    const x1 = CX + r1*Math.cos(angle), y1 = CY + r1*Math.sin(angle);
+    const x2 = CX + r2*Math.cos(angle), y2 = CY + r2*Math.sin(angle);
+    const line = document.createElementNS('http://www.w3.org/2000/svg','line');
+    line.setAttribute('x1',x1); line.setAttribute('y1',y1);
+    line.setAttribute('x2',x2); line.setAttribute('y2',y2);
+    line.setAttribute('class','speed-tick');
+    g.appendChild(line);
+    if (v % 50 === 0) {
+      const lx = CX + (r2+8)*Math.cos(angle), ly = CY + (r2+8)*Math.sin(angle);
+      const t = document.createElementNS('http://www.w3.org/2000/svg','text');
+      t.setAttribute('x',lx); t.setAttribute('y',ly);
+      t.setAttribute('class','speed-tick-label');
+      t.textContent = v;
+      g.appendChild(t);
+    }
+  });
+}
+
+function updateSpeedGauge(speed) {
+  const ratio  = clamp(speed / MAX_SPEED, 0, 1);
+  const arcLen = ratio * ARC;
+  document.getElementById('speed-arc-val').setAttribute(
+    'stroke-dasharray', `${arcLen} ${CIRC - arcLen}`
+  );
+  document.getElementById('speed-value').textContent = Math.round(speed);
+}
+
+// ── RPM ────────────────────────────────────────────────────────────────────────
+function updateRPM(rpm, maxRpm) {
+  const ratio = maxRpm > 0 ? clamp(rpm / maxRpm, 0, 1) : 0;
+  document.getElementById('rpm-fill').style.width = `${ratio * 100}%`;
+  document.getElementById('rpm-value-text').textContent = Math.round(rpm).toLocaleString();
+  document.getElementById('rpm-mini').setAttribute('width', ratio * 160);
+  document.getElementById('rpm-mini-text').textContent = Math.round(rpm).toLocaleString();
+}
+
+// ── Gear ───────────────────────────────────────────────────────────────────────
+function updateGear(gear) {
+  const el = document.getElementById('gear-value');
+  el.textContent = gear === 0 ? 'N' : gear === 10 ? 'R' : String(gear);
+  el.className   = gear === 0 ? 'neutral' : '';
+}
+
+// ── G-force ────────────────────────────────────────────────────────────────────
+function updateGForce(gLat, gLon) {
+  const x = clamp(G_CENTER + gLat * G_SCALE, 8, 172);
+  const y = clamp(G_CENTER - gLon * G_SCALE, 8, 172);
+
+  gTrail.push({x, y});
+  if (gTrail.length > MAX_TRAIL) gTrail.shift();
+
+  const trailEl = document.getElementById('g-trail');
+  trailEl.innerHTML = '';
+  gTrail.forEach((pt, i) => {
+    const c = document.createElementNS('http://www.w3.org/2000/svg','circle');
+    c.setAttribute('cx', pt.x);
+    c.setAttribute('cy', pt.y);
+    c.setAttribute('r', 2.5);
+    c.setAttribute('class','g-trail-dot');
+    c.style.opacity = (i / gTrail.length) * 0.3;
+    trailEl.appendChild(c);
+  });
+
+  document.getElementById('g-dot').setAttribute('cx', x);
+  document.getElementById('g-dot').setAttribute('cy', y);
+  document.getElementById('g-lat-val').textContent = gLat.toFixed(2);
+  document.getElementById('g-lon-val').textContent = gLon.toFixed(2);
+}
+
+// ── Inputs ─────────────────────────────────────────────────────────────────────
+function updateInputs(thr, brk, boost, fuel) {
+  for (const [k,v] of [['thr',thr],['brk',brk]]) {
+    const pct = clamp(v, 0, 100);
+    document.getElementById(`bar-${k}`).style.width = `${pct}%`;
+    document.getElementById(`pct-${k}`).textContent  = `${Math.round(pct)}%`;
+  }
+  const boostPct = clamp((boost / MAX_BOOST) * 100, 0, 100);
+  document.getElementById('bar-boost').style.width = `${boostPct}%`;
+  document.getElementById('pct-boost').textContent = `${boost.toFixed(1)} psi`;
+  const fuelPct = clamp(fuel * 100, 0, 100);
+  document.getElementById('bar-fuel').style.width = `${fuelPct}%`;
+  document.getElementById('pct-fuel').textContent = `${Math.round(fuelPct)}%`;
+}
+
+// ── Tyres ──────────────────────────────────────────────────────────────────────
+// Temperature (°C) → color
+function tempColor(c) {
+  if (c == null || c < 40) return '#4fc3f7';   // cold — blue
+  if (c < 65)              return '#00d4ff';   // warming — cyan
+  if (c < 85)              return '#00ff87';   // optimal — green
+  if (c < 105)             return '#ffd700';   // hot — amber
+  return '#ff3b3b';                            // overheating — red
+}
+
+// Slip angle (rad → deg string with sign)
+function fmtAngle(rad) {
+  if (rad == null || rad === 0) return '—';
+  const deg = rad * 180 / Math.PI;
+  const sign = deg >= 0 ? '+' : '';
+  return `${sign}${deg.toFixed(1)}°`;
+}
+
+function updateTire(pos, tempF, slip, susNorm, slipAngleRad) {
+  // Fix: relay sends °F from Forza — convert to °C
+  const tempC = (tempF != null && tempF > 32) ? Math.round((tempF - 32) * 5 / 9) : null;
+  const col   = tempColor(tempC);
+
+  // Donut arc — arc length proportional to combined slip (0-1.5 scale)
+  const arcFrac = clamp(slip / 1.5, 0, 1);
+  const arcLen  = arcFrac * DONUT_CIRC;
+  const arcRest = DONUT_CIRC - arcLen + 0.1;
+
+  const arc = document.getElementById(`t${pos}-arc`);
+  if (arc) {
+    arc.setAttribute('stroke', col);
+    arc.setAttribute('stroke-dasharray', `${arcLen.toFixed(1)} ${arcRest.toFixed(1)}`);
+  }
+
+  // Temperature text (center of donut)
+  const tempEl = document.getElementById(`t${pos}-temp`);
+  if (tempEl) {
+    tempEl.textContent = tempC != null ? `${tempC}°` : '—°';
+    tempEl.setAttribute('fill', col);
+  }
+
+  // Slip label below temp
+  const slipEl = document.getElementById(`t${pos}-slip`);
+  if (slipEl) {
+    const pct = Math.round(arcFrac * 100);
+    slipEl.textContent = pct > 2 ? `${pct}%` : 'idle';
+  }
+
+  // Suspension bar: 0=fully extended, 1=fully compressed
+  const suspEl = document.getElementById(`t${pos}-susp`);
+  if (suspEl) {
+    const susPct = clamp(Math.round((susNorm ?? 0.5) * 100), 0, 100);
+    suspEl.style.width = `${susPct}%`;
+    // Color: normal (0-65%) = primary, loaded (65-82%) = amber, hard (>82%) = red
+    suspEl.style.background = susPct > 82 ? '#ff3b3b' : susPct > 65 ? '#ffd700' : '#00d4ff';
+  }
+
+  // Slip angle (radians → degrees)
+  const angleEl = document.getElementById(`t${pos}-angle`);
+  if (angleEl) {
+    angleEl.textContent = fmtAngle(slipAngleRad);
+  }
+}
+
+// ── Track Map ─────────────────────────────────────────────────────────────────
+function trackUpdate(px, pz, spd, lapNum, yaw) {
+  if (px === 0 && pz === 0) return;   // no position (menu / sled-only packet)
+
+  // Detect lap transition
+  if (trackLastLap >= 0 && lapNum > trackLastLap) {
+    trackPrevLap = trackCurLap.slice();
+    trackCurLap  = [];
+    // Keep trackBounds — the track doesn't move
+  }
+  trackLastLap = lapNum;
+  trackYaw     = yaw;
+
+  trackCurLap.push({ x: px, z: pz, spd });
+  if (trackCurLap.length > TRACK_MAX_PTS) trackCurLap.shift();
+
+  // Expand global bounds (never shrink — track shape discovered over time)
+  if (!trackBounds) {
+    trackBounds = { minX: px, maxX: px, minZ: pz, maxZ: pz };
+  } else {
+    if (px < trackBounds.minX) trackBounds.minX = px;
+    if (px > trackBounds.maxX) trackBounds.maxX = px;
+    if (pz < trackBounds.minZ) trackBounds.minZ = pz;
+    if (pz > trackBounds.maxZ) trackBounds.maxZ = pz;
+  }
+
+  drawTrackMap();
+}
+
+function drawTrackMap() {
+  const canvas = document.getElementById('track-canvas');
+  if (!canvas) return;
+  const W = canvas.width, H = canvas.height;
+  if (!W || !H) return;
+
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#07070f';
+  ctx.fillRect(0, 0, W, H);
+
+  if (!trackBounds || trackCurLap.length < 2) {
+    ctx.fillStyle = '#1e1e3a';
+    ctx.font      = `${Math.round(W * 0.045)}px 'Courier New'`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('DRIVE TO MAP TRACK', W * 0.5, H * 0.5);
+    return;
+  }
+
+  const pad    = Math.round(W * 0.06);
+  const rangeX = trackBounds.maxX - trackBounds.minX || 1;
+  const rangeZ = trackBounds.maxZ - trackBounds.minZ || 1;
+  const scale  = Math.min((W - pad * 2) / rangeX, (H - pad * 2) / rangeZ);
+  const offX   = (W - rangeX * scale) / 2;
+  const offZ   = (H - rangeZ * scale) / 2;
+
+  function toSX(x) { return offX + (x - trackBounds.minX) * scale; }
+  function toSY(z) { return offZ + (z - trackBounds.minZ) * scale; }
+
+  // ── Previous lap ghost (dim) ──
+  if (trackPrevLap.length > 1) {
+    ctx.beginPath();
+    ctx.strokeStyle = '#1e1e3a';
+    ctx.lineWidth   = Math.max(1.5, W * 0.006);
+    ctx.lineCap     = 'round';
+    ctx.lineJoin    = 'round';
+    for (let i = 0; i < trackPrevLap.length; i++) {
+      const p = trackPrevLap[i];
+      i === 0 ? ctx.moveTo(toSX(p.x), toSY(p.z)) : ctx.lineTo(toSX(p.x), toSY(p.z));
+    }
+    ctx.stroke();
+  }
+
+  // ── Current lap (speed-colored segments) ──
+  if (trackCurLap.length > 1) {
+    const maxSpd  = Math.max(...trackCurLap.map(p => p.spd), 1);
+    const lw      = Math.max(2, W * 0.009);
+    ctx.lineWidth = lw;
+    ctx.lineCap   = 'round';
+    for (let i = 1; i < trackCurLap.length; i++) {
+      const a = trackCurLap[i - 1], b = trackCurLap[i];
+      const t = b.spd / maxSpd;
+      ctx.beginPath();
+      ctx.strokeStyle = `hsl(${Math.round(240 - t * 200)},90%,55%)`;
+      ctx.moveTo(toSX(a.x), toSY(a.z));
+      ctx.lineTo(toSX(b.x), toSY(b.z));
+      ctx.stroke();
+    }
+  }
+
+  // ── Car marker with yaw direction ──
+  if (trackCurLap.length > 0) {
+    const last = trackCurLap[trackCurLap.length - 1];
+    const sx   = toSX(last.x);
+    const sy   = toSY(last.z);
+    const r    = Math.max(5, W * 0.018);
+
+    // Direction arrow (yaw: 0=+Z, π/2=+X in Forza)
+    const arrowLen = r * 2.4;
+    ctx.beginPath();
+    ctx.moveTo(sx, sy);
+    ctx.lineTo(sx + Math.sin(trackYaw) * arrowLen, sy + Math.cos(trackYaw) * arrowLen);
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth   = 2;
+    ctx.lineCap     = 'round';
+    ctx.stroke();
+
+    // Glowing car dot
+    ctx.beginPath();
+    ctx.arc(sx, sy, r, 0, Math.PI * 2);
+    ctx.fillStyle   = '#00d4ff';
+    ctx.shadowColor = '#00d4ff';
+    ctx.shadowBlur  = r * 2.5;
+    ctx.fill();
+    ctx.shadowBlur  = 0;
+  }
+}
+
+// ── Canvas sizing via ResizeObserver ──────────────────────────────────────────
+function initTrackCanvas() {
+  const wrap   = document.getElementById('track-canvas-wrap');
+  const canvas = document.getElementById('track-canvas');
+  if (!wrap || !canvas) return;
+
+  const ro = new ResizeObserver(([entry]) => {
+    const dpr = window.devicePixelRatio || 1;
+    const { width, height } = entry.contentRect;
+    if (!width || !height) return;
+    canvas.width  = Math.round(width  * dpr);
+    canvas.height = Math.round(height * dpr);
+    drawTrackMap();
+  });
+  ro.observe(wrap);
+}
+
+// ── Lap history ────────────────────────────────────────────────────────────────
+let lastLapCount = 0;
+
+function renderLaps(laps) {
+  if (laps.length === lastLapCount) return;
+  lastLapCount = laps.length;
+
+  const best = laps.reduce((b, l) => (l.lap_time < b ? l.lap_time : b), Infinity);
+  const container = document.getElementById('lap-rows');
+  container.innerHTML = '';
+
+  laps.forEach(lap => {
+    const row    = document.createElement('div');
+    const isBest = lap.lap_time === best;
+    row.className = `lap-row${isBest ? ' best-lap' : ''}`;
+    const badges = [];
+    if (isBest)                  badges.push('<span class="lap-badge badge-best">BEST</span>');
+    if (lap.estimated === 'true') badges.push('<span class="lap-badge badge-est">EST</span>');
+    if (lap.dirty === 'true')     badges.push('<span class="lap-badge badge-dirty">RWD</span>');
+    row.innerHTML = `
+      <div class="h-lap">${lap.lap_number ?? '—'}</div>
+      <div class="h-sess">${lap.session_id?.slice(0,8) ?? '—'}</div>
+      <div class="lap-time-val">${fmtTime(lap.lap_time)}</div>
+      <div>${lap.max_speed_kmh ? Math.round(lap.max_speed_kmh)+' km/h' : '—'}</div>
+      <div>${badges.join('')}</div>`;
+    container.appendChild(row);
+  });
+}
+
+// ── SSE live stream ────────────────────────────────────────────────────────────
+let offlineTimeout = null;
+const overlay = document.getElementById('offline-overlay');
+
+function applyTelemetry(d) {
+  if (!d.is_live) { setOffline(); return; }
+
+  const isRacing = d.race_on == null || d.race_on === 1;
+
+  overlay.classList.remove('visible');
+  if (offlineTimeout) { clearTimeout(offlineTimeout); offlineTimeout = null; }
+
+  const badge = document.getElementById('live-badge');
+  badge.className   = isRacing ? 'live' : 'menu';
+  badge.textContent = isRacing ? 'LIVE' : 'MENU';
+
+  // Header
+  document.getElementById('hdr-session').textContent = d.session_id?.slice(0,8) ?? '—';
+  document.getElementById('hdr-car').textContent =
+    [d.car_class, d.drivetrain, d.car_ordinal ? `#${d.car_ordinal}` : ''].filter(Boolean).join(' · ') || '—';
+  document.getElementById('car-class').textContent = d.car_class ?? '—';
+
+  // Smoothed gauges
+  updateSpeedGauge(smooth('speed', d.speed_kmh      ?? 0));
+  updateRPM(smooth('rpm', d.engine_rpm ?? 0), d.engine_max_rpm ?? 8500);
+  updateGear(d.gear ?? 0);
+
+  // Lap times
+  document.getElementById('cur-lap').textContent = fmtTime(d.current_lap_time);
+  document.getElementById('lap-num').textContent = d.lap_number ?? '—';
+  const best = d.best_lap;
+  if (best && best > 0.5) {
+    const isNewBest = best < bestLapSeen;
+    if (isNewBest) bestLapSeen = best;
+    const el = document.getElementById('best-lap');
+    el.textContent = fmtTime(best);
+    el.className   = `lap-big${isNewBest ? ' new-best' : ''}`;
+    document.getElementById('best-lap-sub').textContent = isNewBest ? '★ new best!' : '';
+  }
+
+  // G-force
+  updateGForce(smooth('gLat', d.g_lateral ?? 0), smooth('gLon', d.g_longitudinal ?? 0));
+
+  // Inputs
+  updateInputs(
+    smooth('thr',   d.throttle_pct ?? 0),
+    smooth('brk',   d.brake_pct    ?? 0),
+    smooth('boost', d.boost        ?? 0),
+    d.fuel ?? 1,
+  );
+
+  // Tyres — smoothed slip + suspension, raw temperature (slow-changing)
+  updateTire('fl',
+    d.tire_temp_fl,
+    smooth('slipFL', d.tire_combined_slip_fl ?? 0),
+    smooth('suspFL', d.norm_susp_fl ?? 0.5),
+    d.tire_slip_angle_fl ?? 0,
+  );
+  updateTire('fr',
+    d.tire_temp_fr,
+    smooth('slipFR', d.tire_combined_slip_fr ?? 0),
+    smooth('suspFR', d.norm_susp_fr ?? 0.5),
+    d.tire_slip_angle_fr ?? 0,
+  );
+  updateTire('rl',
+    d.tire_temp_rl,
+    smooth('slipRL', d.tire_combined_slip_rl ?? 0),
+    smooth('suspRL', d.norm_susp_rl ?? 0.5),
+    d.tire_slip_angle_rl ?? 0,
+  );
+  updateTire('rr',
+    d.tire_temp_rr,
+    smooth('slipRR', d.tire_combined_slip_rr ?? 0),
+    smooth('suspRR', d.norm_susp_rr ?? 0.5),
+    d.tire_slip_angle_rr ?? 0,
+  );
+
+  // Track map
+  trackUpdate(
+    d.pos_x ?? 0,
+    d.pos_z ?? 0,
+    d.speed_kmh ?? 0,
+    d.lap_number ?? 0,
+    d.yaw ?? 0,
+  );
+}
+
+function setOffline() {
+  document.getElementById('live-badge').className   = '';
+  document.getElementById('live-badge').textContent = 'OFFLINE';
+  if (!offlineTimeout) {
+    offlineTimeout = setTimeout(() => overlay.classList.add('visible'), 3000);
+  }
+}
+
+function connectSSE() {
+  const es = new EventSource('/api/live/stream');
+  es.onmessage = e => {
+    try { applyTelemetry(JSON.parse(e.data)); } catch (_) {}
+  };
+  es.onerror = () => {
+    setOffline();
+    es.close();
+    setTimeout(connectSSE, 3000);
+  };
+}
+
+async function pollLaps() {
+  try {
+    const res = await fetch('/api/laps?limit=20');
+    renderLaps(await res.json());
+  } catch (_) {}
+}
+
+// ── Init ───────────────────────────────────────────────────────────────────────
+buildSpeedTicks();
+initTrackCanvas();
+connectSSE();
+pollLaps();
+setInterval(pollLaps, LAPS_POLL);
+</script>
+</body>
+</html>

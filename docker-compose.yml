@@ -1,0 +1,103 @@
+services:
+
+  # ── InfluxDB 2.x ────────────────────────────────────────────────────────────
+  influxdb:
+    image: influxdb:2.7
+    restart: unless-stopped
+    ports:
+      - "8086:8086"
+    environment:
+      DOCKER_INFLUXDB_INIT_MODE: setup
+      DOCKER_INFLUXDB_INIT_USERNAME: ${INFLUXDB_INIT_USERNAME}
+      DOCKER_INFLUXDB_INIT_PASSWORD: ${INFLUXDB_INIT_PASSWORD}
+      DOCKER_INFLUXDB_INIT_ORG: ${INFLUXDB_ORG}
+      DOCKER_INFLUXDB_INIT_BUCKET: ${INFLUXDB_BUCKET}
+      DOCKER_INFLUXDB_INIT_ADMIN_TOKEN: ${INFLUXDB_TOKEN}
+      DOCKER_INFLUXDB_INIT_RETENTION: "0"  # infinite retention
+    volumes:
+      - influxdb_data:/var/lib/influxdb2
+      - influxdb_config:/etc/influxdb2
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8086/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+  # ── Grafana ──────────────────────────────────────────────────────────────────
+  grafana:
+    image: grafana/grafana:11.4.0
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_USER}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      INFLUXDB_TOKEN: ${INFLUXDB_TOKEN}
+      INFLUXDB_ORG: ${INFLUXDB_ORG}
+      INFLUXDB_BUCKET: ${INFLUXDB_BUCKET}
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning
+    depends_on:
+      influxdb:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - "CMD-SHELL"
+        - "wget --no-verbose --tries=1 --spider http://localhost:3000/api/health || exit 1"
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
+  # ── Custom dashboard ─────────────────────────────────────────────────────────
+  dashboard:
+    build: ./dashboard
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      INFLUXDB_URL: http://influxdb:8086
+      INFLUXDB_TOKEN: ${INFLUXDB_TOKEN}
+      INFLUXDB_ORG: ${INFLUXDB_ORG}
+      INFLUXDB_BUCKET: ${INFLUXDB_BUCKET}
+      RELAY_FILE: /relay/latest.json
+    volumes:
+      - relay_data:/relay
+    depends_on:
+      influxdb:
+        condition: service_healthy
+
+  # ── Collector ────────────────────────────────────────────────────────────────
+  # network_mode: host binds directly to the Mac's UDP port via Docker Desktop
+  # host networking — no VPNKit proxy, survives container restarts cleanly.
+  # On Linux/Proxmox this works the same way (and is even more native there).
+  collector:
+    build: ./collector
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      # With host networking, reach InfluxDB via its published Mac host port.
+      INFLUXDB_URL: http://localhost:8086
+      INFLUXDB_TOKEN: ${INFLUXDB_TOKEN}
+      INFLUXDB_ORG: ${INFLUXDB_ORG}
+      INFLUXDB_BUCKET: ${INFLUXDB_BUCKET}
+      UDP_PORT: ${UDP_PORT:-5302}
+      DASHBOARD_RELAY_FILE: /relay/latest.json
+    volumes:
+      - relay_data:/relay
+    depends_on:
+      influxdb:
+        condition: service_healthy
+
+
+volumes:
+  influxdb_data:
+  influxdb_config:
+  grafana_data:
+  relay_data:        # tmpfs-backed in the VM; shared between collector & dashboard
+    driver: local
+    driver_opts:
+      type: tmpfs
+      device: tmpfs

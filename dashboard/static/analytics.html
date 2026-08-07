@@ -1,0 +1,1257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PitLane — Analytics</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+/* ── Tokens ───────────────────────────────────────────────────────────────── */
+:root {
+  --bg:        #07070e;
+  --surface:   #0d0d1c;
+  --card:      #101024;
+  --card-hover:#141432;
+  --border:    #1a1a38;
+  --border2:   #242448;
+  --text:      #d4d4ee;
+  --text-dim:  #8888b8;
+  --muted:     #44446a;
+  --accent:    #e8a020;
+  --gold:      #f0c840;
+  --green:     #28cc88;
+  --red:       #e03838;
+  --cyan:      #00c8f0;
+  --purple:    #8c3dc8;
+  --font-mono: 'Courier New', Courier, monospace;
+  --font-ui:   -apple-system, 'Segoe UI', Arial, sans-serif;
+  --cls-d:#8c8c8c; --cls-c:#d4ca00; --cls-b:#e87c00;
+  --cls-a:#d42020; --cls-s1:#8c3dc8; --cls-s2:#3c78c8; --cls-x:#28c828;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg:#f0f0f8; --surface:#e4e4f0; --card:#ffffff; --card-hover:#f4f4ff;
+    --border:#d0d0e8; --border2:#b8b8d8; --text:#18182c; --text-dim:#44447a;
+    --muted:#9090b8; --accent:#c07000; --gold:#a07800;
+    --green:#1a9960; --red:#c02020; --cyan:#007898;
+  }
+}
+:root[data-theme="dark"] {
+  --bg:#07070e; --surface:#0d0d1c; --card:#101024; --card-hover:#141432;
+  --border:#1a1a38; --border2:#242448; --text:#d4d4ee; --text-dim:#8888b8;
+  --muted:#44446a; --accent:#e8a020; --gold:#f0c840;
+  --green:#28cc88; --red:#e03838; --cyan:#00c8f0;
+}
+
+/* ── Base ─────────────────────────────────────────────────────────────────── */
+html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(--text);
+  font-family: var(--font-ui); font-size: 14px; }
+
+/* ── Header ───────────────────────────────────────────────────────────────── */
+#header { height: 48px; background: var(--surface); border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; gap: 20px; padding: 0 16px; flex-shrink: 0; }
+.logo { font-size: 1.05rem; font-weight: 700; letter-spacing: 3px; color: var(--cyan); }
+.logo span { color: var(--muted); font-weight: 400; }
+nav { display: flex; gap: 2px; margin-left: 8px; }
+nav a { font-size: 0.72rem; letter-spacing: 1.5px; text-transform: uppercase;
+  padding: 5px 12px; border-radius: 3px; text-decoration: none; color: var(--text-dim);
+  transition: color 0.15s, background 0.15s; }
+nav a:hover { color: var(--text); background: var(--border); }
+nav a.active { color: var(--accent); background: rgba(232,160,32,0.1); }
+#header-right { margin-left: auto; display: flex; gap: 10px; align-items: center; }
+#session-count { font-size: 0.7rem; color: var(--muted); }
+
+/* ── Layout ───────────────────────────────────────────────────────────────── */
+#layout { display: grid; grid-template-columns: 320px 1fr; height: calc(100vh - 48px); overflow: hidden; }
+
+/* ── Sidebar ──────────────────────────────────────────────────────────────── */
+#sidebar { border-right: 1px solid var(--border); display: flex; flex-direction: column; overflow: hidden; }
+#filter-bar { padding: 10px 12px; border-bottom: 1px solid var(--border); display: flex;
+  flex-direction: column; gap: 8px; flex-shrink: 0; }
+#filter-input { width: 100%; background: var(--bg); border: 1px solid var(--border2);
+  color: var(--text); padding: 6px 10px; border-radius: 4px; font-size: 0.8rem;
+  font-family: var(--font-ui); outline: none; }
+#filter-input:focus { border-color: var(--accent); }
+#filter-input::placeholder { color: var(--muted); }
+#class-pills { display: flex; gap: 4px; flex-wrap: wrap; }
+.cls-pill { font-size: 0.65rem; font-weight: 700; letter-spacing: 1px;
+  padding: 3px 8px; border-radius: 3px; cursor: pointer; border: 1px solid transparent;
+  transition: opacity 0.15s; opacity: 0.45; background: none; }
+.cls-pill.active { opacity: 1; border-color: currentColor; }
+.cls-pill:hover  { opacity: 0.8; }
+#session-list { overflow-y: auto; flex: 1; padding: 6px 0; }
+#session-list::-webkit-scrollbar { width: 4px; }
+#session-list::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+/* ── Session card ─────────────────────────────────────────────────────────── */
+.session-card { display: flex; gap: 0; cursor: pointer; border-bottom: 1px solid var(--border);
+  transition: background 0.1s; }
+.session-card:hover  { background: var(--card-hover); }
+.session-card.active { background: var(--card); }
+.card-rail { width: 4px; flex-shrink: 0; }
+.card-body { flex: 1; padding: 9px 11px 8px; min-width: 0; }
+.card-top { display: flex; align-items: center; gap: 6px; margin-bottom: 3px; }
+.cls-badge { font-size: 0.65rem; font-weight: 800; letter-spacing: 1px;
+  padding: 2px 6px; border-radius: 3px; background: rgba(255,255,255,0.06); flex-shrink: 0; }
+.card-car { font-size: 0.78rem; font-weight: 600; color: var(--text);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; min-width: 0; }
+.drive-badge { margin-left: auto; font-size: 0.6rem; letter-spacing: 1px;
+  color: var(--text-dim); background: var(--border); padding: 1px 5px;
+  border-radius: 2px; flex-shrink: 0; }
+.card-date { font-size: 0.7rem; color: var(--text-dim); margin-bottom: 4px; }
+.card-stats { display: flex; gap: 10px; font-size: 0.7rem; color: var(--text-dim);
+  font-variant-numeric: tabular-nums; margin-bottom: 6px; }
+.card-stats .val { color: var(--text); font-weight: 500; }
+.sparkline-wrap { height: 28px; }
+.sparkline-wrap svg { display: block; }
+
+/* ── Detail panel ─────────────────────────────────────────────────────────── */
+#detail { display: flex; flex-direction: column; overflow: hidden; }
+#empty-state { flex: 1; display: flex; flex-direction: column; align-items: center;
+  justify-content: center; gap: 12px; color: var(--muted); }
+#empty-state .empty-icon { font-size: 2.5rem; opacity: 0.3; }
+#empty-state p { font-size: 0.85rem; letter-spacing: 1px; }
+#session-view { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
+
+/* ── Session header ───────────────────────────────────────────────────────── */
+#session-header { padding: 12px 20px 10px; border-bottom: 1px solid var(--border);
+  flex-shrink: 0; display: flex; align-items: center; gap: 14px; }
+#session-header .cls-badge-lg { font-size: 0.9rem; font-weight: 800; letter-spacing: 2px;
+  padding: 4px 10px; border-radius: 4px; background: rgba(255,255,255,0.06); }
+#hdr-info { flex: 1; min-width: 0; }
+#hdr-car  { font-size: 0.95rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#hdr-meta { font-size: 0.7rem; color: var(--text-dim); margin-top: 2px; }
+
+/* ── Stats grid ───────────────────────────────────────────────────────────── */
+#stats-grid { display: grid; grid-template-columns: repeat(6, 1fr);
+  border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.stat-cell { padding: 10px 14px; border-right: 1px solid var(--border); }
+.stat-cell:last-child { border-right: none; }
+.stat-label { font-size: 0.58rem; letter-spacing: 2px; text-transform: uppercase;
+  color: var(--muted); margin-bottom: 4px; }
+.stat-value { font: 700 1.2rem/1 var(--font-mono); color: var(--text); font-variant-numeric: tabular-nums; }
+.stat-value.gold  { color: var(--gold); }
+.stat-value.green { color: var(--green); }
+.stat-sub { font-size: 0.62rem; color: var(--text-dim); margin-top: 3px; }
+
+/* ── Tab bar ──────────────────────────────────────────────────────────────── */
+#tab-bar { display: flex; border-bottom: 1px solid var(--border); padding: 0 16px;
+  flex-shrink: 0; gap: 0; }
+.tab-btn { font-size: 0.68rem; letter-spacing: 1.5px; text-transform: uppercase;
+  padding: 9px 14px 8px; background: none; border: none; border-bottom: 2px solid transparent;
+  cursor: pointer; color: var(--text-dim); margin-bottom: -1px;
+  transition: color 0.15s, border-color 0.15s; }
+.tab-btn:hover { color: var(--text); }
+.tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+/* ── Tab panels ───────────────────────────────────────────────────────────── */
+.tab-panel { display: none; flex: 1; overflow: hidden; flex-direction: column; min-height: 0; }
+.tab-panel.active { display: flex; }
+
+/* ── Lap table (Overview tab) ─────────────────────────────────────────────── */
+#lap-table-wrap { flex: 1; overflow-y: auto; overflow-x: auto; }
+#lap-table-wrap::-webkit-scrollbar { width: 4px; height: 4px; }
+#lap-table-wrap::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+table { width: 100%; border-collapse: collapse; font-size: 0.78rem; font-variant-numeric: tabular-nums; }
+thead th { position: sticky; top: 0; z-index: 1; background: var(--surface);
+  font-size: 0.6rem; letter-spacing: 2px; text-transform: uppercase; color: var(--muted);
+  font-weight: 500; padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--border2);
+  white-space: nowrap; }
+tbody tr { border-bottom: 1px solid rgba(26,26,56,0.6); transition: background 0.1s; }
+tbody tr:hover { background: var(--card-hover); }
+tbody tr.best-row  { background: rgba(240,200,64,0.05); }
+tbody tr.dirty-row { opacity: 0.65; }
+td { padding: 7px 10px; vertical-align: middle; white-space: nowrap; }
+.td-lap  { color: var(--muted); width: 36px; }
+.td-time { font-family: var(--font-mono); font-weight: 600; }
+.td-time.best { color: var(--gold); }
+.td-delta { width: 160px; }
+.delta-wrap { display: flex; align-items: center; gap: 7px; }
+.delta-label { font-family: var(--font-mono); font-size: 0.72rem; width: 64px;
+  text-align: right; flex-shrink: 0; }
+.delta-label.best { color: var(--gold); font-weight: 700; }
+.delta-label.plus { color: var(--text-dim); }
+.delta-bar-track { flex: 1; height: 5px; background: var(--border); border-radius: 3px; overflow: hidden; }
+.delta-bar-fill  { height: 100%; border-radius: 3px; transition: width 0.3s; }
+.input-chip { display: inline-block; width: 38px; text-align: right;
+  padding: 1px 4px; border-radius: 2px; font-size: 0.7rem; }
+.chip-thr { color: var(--green); }
+.chip-brk { color: var(--red); }
+.flags { display: flex; gap: 4px; }
+.flag { font-size: 0.6rem; padding: 1px 5px; border-radius: 2px; letter-spacing: 1px; }
+.flag-best { background: rgba(240,200,64,0.15); color: var(--gold); }
+.flag-est  { background: rgba(232,160,32,0.15); color: var(--accent); }
+.flag-rwd  { background: rgba(224,56,56,0.15);  color: var(--red); }
+.no-laps { padding: 40px; text-align: center; color: var(--muted); font-size: 0.85rem; }
+
+/* ── Track Map tab ────────────────────────────────────────────────────────── */
+#map-controls { display: flex; align-items: center; gap: 10px; padding: 8px 16px;
+  border-bottom: 1px solid var(--border); flex-shrink: 0; flex-wrap: wrap; }
+#map-lap-select { background: var(--bg); border: 1px solid var(--border2);
+  color: var(--text); padding: 4px 8px; border-radius: 3px; font-size: 0.72rem; cursor: pointer; }
+.view-toggle { display: flex; border: 1px solid var(--border2); border-radius: 3px; overflow: hidden; }
+.view-toggle button { padding: 4px 10px; background: none; border: none;
+  font-size: 0.68rem; letter-spacing: 1px; cursor: pointer; color: var(--text-dim);
+  transition: background 0.15s, color 0.15s; }
+.view-toggle button.active { background: var(--border); color: var(--accent); }
+.speed-grad { height: 6px; width: 96px; border-radius: 3px;
+  background: linear-gradient(to right, hsl(240,100%,55%), hsl(180,100%,50%), hsl(120,100%,45%), hsl(60,100%,50%), hsl(0,100%,55%)); }
+.speed-grad-lbl { display: flex; justify-content: space-between;
+  font-size: 0.58rem; color: var(--muted); width: 96px; margin-top: 1px; }
+.map-event-key { display: flex; align-items: center; gap: 4px; font-size: 0.68rem; color: var(--text-dim); }
+.evdot { width: 8px; height: 8px; border-radius: 50%; background: var(--red); display: inline-block; }
+.evline { width: 14px; height: 2px; background: var(--cyan); display: inline-block; }
+#map-canvas-wrap { flex: 1; min-height: 0; position: relative; overflow: hidden; }
+#track-canvas { display: block; }
+#map-loading { position: absolute; inset: 0; display: flex; align-items: center;
+  justify-content: center; color: var(--muted); font-size: 0.78rem; letter-spacing: 2px;
+  pointer-events: none; }
+#map-event-bar { padding: 6px 16px; border-top: 1px solid var(--border);
+  font-size: 0.68rem; color: var(--text-dim); flex-shrink: 0;
+  display: flex; gap: 16px; flex-wrap: wrap; min-height: 28px; align-items: center; }
+
+/* ── Lap Compare tab ──────────────────────────────────────────────────────── */
+#compare-controls { padding: 10px 16px; border-bottom: 1px solid var(--border);
+  flex-shrink: 0; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+#compare-lap-grid { display: flex; flex-wrap: wrap; gap: 4px; }
+.cmp-lap-btn { font-size: 0.68rem; font-family: var(--font-mono);
+  padding: 3px 9px; border-radius: 3px; cursor: pointer; background: none;
+  border: 1px solid var(--border2); color: var(--text-dim); transition: all 0.15s; }
+.cmp-lap-btn.sel { color: var(--bg); border-color: transparent; }
+.compare-run-btn { font-size: 0.68rem; letter-spacing: 1px; text-transform: uppercase;
+  padding: 5px 14px; border-radius: 3px; cursor: pointer;
+  background: var(--accent); color: #07070e; border: none; transition: opacity 0.15s; }
+.compare-run-btn:hover { opacity: 0.85; }
+#cmp-legend { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+.cmp-leg { display: flex; align-items: center; gap: 5px; font-size: 0.7rem; color: var(--text-dim); }
+.cmp-leg-line { height: 2px; width: 20px; border-radius: 1px; }
+#compare-charts-wrap { flex: 1; overflow-y: auto; min-height: 0; }
+#compare-charts-wrap::-webkit-scrollbar { width: 4px; }
+#compare-charts-wrap::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+.chart-canvas-row canvas { display: block; width: 100%; }
+#cmp-placeholder { flex: 1; display: flex; align-items: center; justify-content: center;
+  color: var(--muted); font-size: 0.8rem; letter-spacing: 1.5px; }
+#compare-charts-wrap:empty::before { content: "SELECT LAPS AND CLICK COMPARE";
+  display: block; padding: 48px; text-align: center; color: var(--muted);
+  font-size: 0.8rem; letter-spacing: 1.5px; }
+
+/* ── Loading/misc ─────────────────────────────────────────────────────────── */
+#loading { padding: 60px; text-align: center; color: var(--muted); font-size: 0.8rem; letter-spacing: 2px; }
+</style>
+</head>
+<body>
+<div style="display:flex;flex-direction:column;height:100vh">
+
+<div id="header">
+  <div class="logo">PIT<span>LANE</span></div>
+  <nav>
+    <a href="/">Live</a>
+    <a href="/analytics.html" class="active">Analytics</a>
+  </nav>
+  <div id="header-right">
+    <span id="session-count"></span>
+    <a href="http://localhost:3000" target="_blank"
+       style="font-size:0.7rem;color:var(--muted);text-decoration:none;padding:4px 10px;border:1px solid var(--border);border-radius:3px;">Grafana ↗</a>
+  </div>
+</div>
+
+<div id="layout">
+
+  <!-- ─── Sidebar ─────────────────────────────────────────────────────────── -->
+  <aside id="sidebar">
+    <div id="filter-bar">
+      <input id="filter-input" type="text" placeholder="Filter by car, class, or date…" autocomplete="off">
+      <div id="class-pills"></div>
+    </div>
+    <div id="session-list"><div id="loading">LOADING SESSIONS…</div></div>
+  </aside>
+
+  <!-- ─── Detail ───────────────────────────────────────────────────────────── -->
+  <main id="detail">
+    <div id="empty-state">
+      <div class="empty-icon">🏁</div>
+      <p>SELECT A SESSION</p>
+    </div>
+
+    <div id="session-view" style="display:none">
+
+      <!-- Session header -->
+      <div id="session-header">
+        <div class="cls-badge-lg" id="hdr-cls-badge"></div>
+        <div id="hdr-info">
+          <div id="hdr-car"></div>
+          <div id="hdr-meta"></div>
+        </div>
+      </div>
+
+      <!-- Stats grid (6 cells) -->
+      <div id="stats-grid">
+        <div class="stat-cell">
+          <div class="stat-label">Best Lap</div>
+          <div class="stat-value gold" id="st-best">—</div>
+        </div>
+        <div class="stat-cell">
+          <div class="stat-label">Avg Lap</div>
+          <div class="stat-value" id="st-avg">—</div>
+          <div class="stat-sub" id="st-consistency"></div>
+        </div>
+        <div class="stat-cell">
+          <div class="stat-label">Top Speed</div>
+          <div class="stat-value" id="st-speed">—</div>
+        </div>
+        <div class="stat-cell">
+          <div class="stat-label">Max G</div>
+          <div class="stat-value" id="st-g">—</div>
+        </div>
+        <div class="stat-cell">
+          <div class="stat-label">Distance</div>
+          <div class="stat-value" id="st-dist">—</div>
+          <div class="stat-sub" id="st-dirty"></div>
+        </div>
+        <div class="stat-cell">
+          <div class="stat-label">Laps</div>
+          <div class="stat-value green" id="st-laps">—</div>
+        </div>
+      </div>
+
+      <!-- Tab bar -->
+      <div id="tab-bar">
+        <button class="tab-btn active" data-tab="overview"  onclick="switchTab('overview')">Overview</button>
+        <button class="tab-btn"        data-tab="trackmap"  onclick="switchTab('trackmap')">Track Map</button>
+        <button class="tab-btn"        data-tab="compare"   onclick="switchTab('compare')">Lap Compare</button>
+      </div>
+
+      <!-- ── Overview tab ──────────────────────────────────────────────────── -->
+      <div id="tab-overview" class="tab-panel active">
+        <div id="lap-table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th class="td-lap">#</th>
+                <th>Lap Time</th>
+                <th class="td-delta">Delta to Best</th>
+                <th>Top Speed</th>
+                <th>Max G</th>
+                <th>Avg Thr</th>
+                <th>Avg Brk</th>
+                <th>Flags</th>
+              </tr>
+            </thead>
+            <tbody id="lap-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ── Track Map tab ─────────────────────────────────────────────────── -->
+      <div id="tab-trackmap" class="tab-panel">
+        <div id="map-controls">
+          <select id="map-lap-select" onchange="onMapLapChange()">
+            <option value="">All laps</option>
+          </select>
+          <div class="view-toggle">
+            <button id="btn2d" class="active" onclick="setMapView('2d')">2D</button>
+            <button id="btn3d"                onclick="setMapView('3d')">3D</button>
+          </div>
+          <div>
+            <div class="speed-grad"></div>
+            <div class="speed-grad-lbl"><span>0</span><span id="max-speed-lbl">—</span></div>
+          </div>
+          <div class="map-event-key"><span class="evdot"></span> Contact</div>
+          <div class="map-event-key"><span class="evline"></span> Jump</div>
+        </div>
+        <div id="map-canvas-wrap">
+          <canvas id="track-canvas"></canvas>
+          <div id="map-loading">LOADING TRACK DATA…</div>
+        </div>
+        <div id="map-event-bar"></div>
+      </div>
+
+      <!-- ── Lap Compare tab ───────────────────────────────────────────────── -->
+      <div id="tab-compare" class="tab-panel">
+        <div id="compare-controls">
+          <div id="compare-lap-grid"></div>
+          <button class="compare-run-btn" onclick="runCompare()">Compare</button>
+          <div id="cmp-legend"></div>
+        </div>
+        <div id="compare-charts-wrap"></div>
+      </div>
+
+    </div><!-- #session-view -->
+  </main>
+
+</div>
+</div>
+
+<script>
+// ══════════════════════════════════════════════════════════════════════════════
+// Helpers
+// ══════════════════════════════════════════════════════════════════════════════
+function fmtTime(s) {
+  if (s == null || s <= 0) return '—:——.———';
+  const m  = Math.floor(s / 60);
+  const ss = Math.floor(s % 60);
+  const ms = Math.round((s % 1) * 1000);
+  return `${m}:${String(ss).padStart(2,'0')}.${String(ms).padStart(3,'0')}`;
+}
+function fmtDelta(d) {
+  if (d == null) return '';
+  const sign = d >= 0 ? '+' : '−';
+  const abs  = Math.abs(d);
+  const ss   = Math.floor(abs);
+  const ms   = Math.round((abs % 1) * 1000);
+  return `${sign}${ss}.${String(ms).padStart(3,'0')}`;
+}
+function fmtDate(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  return d.toLocaleDateString(undefined, {day:'2-digit',month:'short',year:'numeric'})
+       + '  ' + d.toLocaleTimeString(undefined, {hour:'2-digit',minute:'2-digit'});
+}
+function fmtDateShort(iso) {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleDateString(undefined, {day:'2-digit',month:'short'});
+}
+function fmtDist(km) {
+  if (!km || km < 0.01) return '—';
+  if (km < 1) return `${Math.round(km * 1000)} m`;
+  return `${km.toFixed(1)} km`;
+}
+
+const CLASS_COLOR = {D:'#8c8c8c',C:'#d4ca00',B:'#e87c00',A:'#d42020',S1:'#8c3dc8',S2:'#3c78c8',X:'#28c828'};
+function classColor(cls) { return CLASS_COLOR[cls] || '#666688'; }
+
+// Lap compare colors (per-lap)
+const CMP_COLORS = ['#e8a020','#00c8f0','#28cc88','#e03838','#8c3dc8'];
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Car Name Database
+// ══════════════════════════════════════════════════════════════════════════════
+let carDB = {};   // ordinal_string → car name
+
+async function loadCarNames() {
+  try {
+    const res  = await fetch('/car_ordinals.json');
+    const data = await res.json();
+    // Invert: { "Car Name Year": "ordinal" } → { "ordinal": "Car Name Year" }
+    for (const [name, ord] of Object.entries(data)) {
+      carDB[String(ord)] = name;
+    }
+  } catch (e) {
+    console.warn('Car DB not available:', e.message);
+  }
+}
+
+function getCarName(ordinal) {
+  if (!ordinal) return 'Unknown Car';
+  const n = carDB[String(ordinal)];
+  return n || `Car #${ordinal}`;
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Sparkline
+// ══════════════════════════════════════════════════════════════════════════════
+function sparkline(times, w=296, h=28) {
+  const valid = (times || []).filter(t => t > 0);
+  if (valid.length < 2) return '';
+  const lo = Math.min(...valid), hi = Math.max(...valid);
+  const range = hi - lo || 0.001;
+  const pad = 2;
+  const pts = valid.map((t, i) => {
+    const x = pad + (i / (valid.length - 1)) * (w - pad*2);
+    const y = h - pad - ((t - lo) / range) * (h - pad*2);
+    return [x, y];
+  });
+  const line = pts.map(([x,y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
+  const area = `${pts[0][0]},${h} ${line} ${pts[pts.length-1][0]},${h}`;
+  const [lx, ly] = pts[pts.length-1];
+  return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">
+    <polygon points="${area}" fill="rgba(232,160,32,0.08)"/>
+    <polyline points="${line}" fill="none" stroke="rgba(232,160,32,0.45)" stroke-width="1.5" stroke-linejoin="round"/>
+    <circle cx="${lx.toFixed(1)}" cy="${ly.toFixed(1)}" r="2.5" fill="#e8a020"/>
+  </svg>`;
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// App State
+// ══════════════════════════════════════════════════════════════════════════════
+let allSessions   = [];
+let activeFilters = new Set();
+let activeSession = null;
+let trackData     = null;
+let mapLap        = null;   // null = all laps, or specific lap number
+let mapView       = '2d';
+let compareData   = [];
+let selectedLaps  = new Set();
+let _lapsList     = [];     // current session's laps (for compare picker)
+let _mapObserver  = null;
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Session List
+// ══════════════════════════════════════════════════════════════════════════════
+function renderSessionList() {
+  const q    = document.getElementById('filter-input').value.trim().toLowerCase();
+  const list = document.getElementById('session-list');
+
+  const filtered = allSessions.filter(s => {
+    if (activeFilters.size > 0 && !activeFilters.has(s.car_class)) return false;
+    if (q) {
+      const carName = getCarName(s.car_ordinal).toLowerCase();
+      const ord     = (s.car_ordinal || '').toString();
+      if (!s.session_id.includes(q) && !ord.includes(q)
+          && !carName.includes(q) && !fmtDateShort(s.started).toLowerCase().includes(q))
+        return false;
+    }
+    return true;
+  });
+
+  document.getElementById('session-count').textContent =
+    `${filtered.length} session${filtered.length !== 1 ? 's' : ''}`;
+
+  if (!filtered.length) {
+    list.innerHTML = '<div style="padding:30px;text-align:center;color:var(--muted);font-size:0.8rem">No sessions match</div>';
+    return;
+  }
+
+  list.innerHTML = filtered.map(s => {
+    const color    = classColor(s.car_class);
+    const isActive = activeSession?.session_id === s.session_id;
+    const carName  = getCarName(s.car_ordinal);
+    const bestStr  = s.best_lap  ? fmtTime(s.best_lap) : '—';
+    const spdStr   = s.top_speed ? `${Math.round(s.top_speed)} km/h` : '—';
+    return `
+    <div class="session-card${isActive ? ' active' : ''}"
+         data-sid="${s.session_id}" onclick="selectSession('${s.session_id}')">
+      <div class="card-rail" style="background:${color}"></div>
+      <div class="card-body">
+        <div class="card-top">
+          <div class="cls-badge" style="color:${color}">${s.car_class || '?'}</div>
+          <div class="card-car" title="${carName}">${carName}</div>
+          <div class="drive-badge">${s.drivetrain || '—'}</div>
+        </div>
+        <div class="card-date">${fmtDateShort(s.started)} · ${s.lap_count} lap${s.lap_count !== 1 ? 's' : ''}</div>
+        <div class="card-stats">
+          <span>Best <span class="val">${bestStr}</span></span>
+          <span>Top <span class="val">${spdStr}</span></span>
+        </div>
+        <div class="sparkline-wrap">${sparkline(s.lap_times)}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function buildClassPills() {
+  const classes = [...new Set(allSessions.map(s => s.car_class).filter(Boolean))];
+  const order   = ['D','C','B','A','S1','S2','X'];
+  classes.sort((a,b) => order.indexOf(a) - order.indexOf(b));
+  document.getElementById('class-pills').innerHTML = classes.map(cls => {
+    const color = classColor(cls);
+    return `<button class="cls-pill" data-cls="${cls}"
+        style="color:${color};background:${color}18"
+        onclick="toggleClass('${cls}')">${cls}</button>`;
+  }).join('');
+}
+
+function toggleClass(cls) {
+  if (activeFilters.has(cls)) activeFilters.delete(cls);
+  else activeFilters.add(cls);
+  document.querySelectorAll('.cls-pill').forEach(p =>
+    p.classList.toggle('active', activeFilters.has(p.dataset.cls)));
+  renderSessionList();
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Session Detail
+// ══════════════════════════════════════════════════════════════════════════════
+function switchTab(name) {
+  document.querySelectorAll('.tab-btn').forEach(b =>
+    b.classList.toggle('active', b.dataset.tab === name));
+  document.querySelectorAll('.tab-panel').forEach(p =>
+    p.classList.toggle('active', p.id === 'tab-' + name));
+
+  if (name === 'trackmap') {
+    // Ensure canvas is correctly sized after tab becomes visible
+    requestAnimationFrame(() => drawCurrentMap());
+  }
+}
+
+async function selectSession(sid) {
+  const s = allSessions.find(x => x.session_id === sid);
+  if (!s) return;
+  activeSession = s;
+  trackData     = null;
+  compareData   = [];
+  selectedLaps  = new Set();
+  _lapsList     = [];
+  renderSessionList();
+
+  document.getElementById('empty-state').style.display  = 'none';
+  const view = document.getElementById('session-view');
+  view.style.display = 'flex';
+
+  // Header
+  const color = classColor(s.car_class);
+  const badge = document.getElementById('hdr-cls-badge');
+  badge.textContent   = s.car_class || '?';
+  badge.style.color   = color;
+  badge.style.borderLeft = `3px solid ${color}`;
+  document.getElementById('hdr-car').textContent =
+    getCarName(s.car_ordinal) + (s.drivetrain ? `  ·  ${s.drivetrain}` : '');
+  document.getElementById('hdr-meta').textContent =
+    `${fmtDate(s.started)}  —  ${fmtDate(s.ended)}  ·  ${s.session_id}`;
+
+  // Stats
+  document.getElementById('st-best').textContent  = s.best_lap  ? fmtTime(s.best_lap) : '—';
+  document.getElementById('st-avg').textContent   = s.avg_lap   ? fmtTime(s.avg_lap)  : '—';
+  document.getElementById('st-speed').textContent = s.top_speed ? `${Math.round(s.top_speed)} km/h` : '—';
+  document.getElementById('st-g').textContent     = s.max_g     ? `${s.max_g.toFixed(2)} G` : '—';
+  document.getElementById('st-dist').textContent  = fmtDist(s.total_distance_km);
+  document.getElementById('st-laps').textContent  = s.lap_count;
+
+  if (s.best_lap && s.avg_lap) {
+    const gap = ((s.avg_lap - s.best_lap) / s.best_lap * 100).toFixed(1);
+    document.getElementById('st-consistency').textContent = `avg +${gap}% off best`;
+  } else {
+    document.getElementById('st-consistency').textContent = '';
+  }
+
+  // Reset tabs to overview
+  switchTab('overview');
+  document.getElementById('map-loading').style.display = 'flex';
+  document.getElementById('map-event-bar').innerHTML   = '';
+  document.getElementById('compare-charts-wrap').innerHTML = '';
+  document.getElementById('cmp-legend').innerHTML      = '';
+  document.getElementById('compare-lap-grid').innerHTML = '';
+
+  // Load laps
+  const tbody = document.getElementById('lap-tbody');
+  tbody.innerHTML = `<tr><td colspan="8" class="no-laps" style="color:var(--muted)">Loading…</td></tr>`;
+
+  try {
+    const res  = await fetch(`/api/sessions/${sid}/laps`);
+    const laps = await res.json();
+    _lapsList = laps;
+    renderLapTable(laps, s.best_lap);
+    buildComparePicker(laps);
+
+    const dirtyCount = laps.filter(l => l.dirty === 'true').length;
+    document.getElementById('st-dirty').textContent =
+      dirtyCount > 0 ? `${dirtyCount} rewind${dirtyCount > 1 ? 's' : ''}` : 'clean';
+  } catch {
+    tbody.innerHTML = `<tr><td colspan="8" class="no-laps">Failed to load laps</td></tr>`;
+  }
+
+  // Start loading track data in background
+  loadTrackData(sid);
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Lap Table (Overview)
+// ══════════════════════════════════════════════════════════════════════════════
+function renderLapTable(laps, bestLap) {
+  const tbody = document.getElementById('lap-tbody');
+  if (!laps.length) {
+    tbody.innerHTML = `<tr><td colspan="8" class="no-laps">No lap records</td></tr>`;
+    return;
+  }
+  const validTimes = laps.map(l => l.lap_time).filter(t => t && t > 0);
+  const best    = bestLap || (validTimes.length ? Math.min(...validTimes) : 0);
+  const worst   = validTimes.length ? Math.max(...validTimes) : best;
+  const maxDelta = worst - best || 1;
+
+  tbody.innerHTML = laps.map(l => {
+    const isBest  = l.lap_time && Math.abs(l.lap_time - best) < 0.001;
+    const isDirty = l.dirty === 'true';
+    const isEst   = l.estimated === 'true';
+    const delta   = l.lap_time ? l.lap_time - best : null;
+
+    let deltaCell;
+    if (isBest) {
+      deltaCell = `<div class="delta-wrap">
+        <span class="delta-label best">BEST</span>
+        <div class="delta-bar-track"><div class="delta-bar-fill" style="width:4%;background:var(--gold)"></div></div>
+      </div>`;
+    } else if (delta != null) {
+      const pct = Math.min((delta / maxDelta) * 100, 100);
+      const hue = Math.max(0, 120 - pct * 1.2);
+      deltaCell = `<div class="delta-wrap">
+        <span class="delta-label plus">${fmtDelta(delta)}</span>
+        <div class="delta-bar-track"><div class="delta-bar-fill" style="width:${pct.toFixed(1)}%;background:hsl(${hue},80%,52%)"></div></div>
+      </div>`;
+    } else {
+      deltaCell = '<span style="color:var(--muted)">—</span>';
+    }
+
+    const maxG  = Math.max(l.max_g_lat || 0, l.max_g_lon || 0);
+    const gStr  = maxG > 0 ? `${maxG.toFixed(2)}G` : '—';
+    const flags = [];
+    if (isBest)  flags.push('<span class="flag flag-best">BEST</span>');
+    if (isEst)   flags.push('<span class="flag flag-est">EST</span>');
+    if (isDirty) flags.push('<span class="flag flag-rwd">RWD</span>');
+    const rowCls = [isBest ? 'best-row' : '', isDirty ? 'dirty-row' : ''].filter(Boolean).join(' ');
+
+    return `<tr class="${rowCls}">
+      <td class="td-lap">${l.lap_number ?? '—'}</td>
+      <td class="td-time${isBest ? ' best' : ''}">${fmtTime(l.lap_time)}</td>
+      <td class="td-delta">${deltaCell}</td>
+      <td>${l.max_speed_kmh ? Math.round(l.max_speed_kmh) + ' km/h' : '—'}</td>
+      <td style="color:var(--text-dim)">${gStr}</td>
+      <td><span class="input-chip chip-thr">${l.avg_throttle != null ? Math.round(l.avg_throttle) + '%' : '—'}</span></td>
+      <td><span class="input-chip chip-brk">${l.avg_brake    != null ? Math.round(l.avg_brake)    + '%' : '—'}</span></td>
+      <td><div class="flags">${flags.join('')}</div></td>
+    </tr>`;
+  }).join('');
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Track Map
+// ══════════════════════════════════════════════════════════════════════════════
+async function loadTrackData(sid) {
+  document.getElementById('map-loading').textContent = 'LOADING TRACK DATA…';
+  document.getElementById('map-loading').style.display = 'flex';
+  try {
+    const res = await fetch(`/api/sessions/${sid}/track`);
+    trackData  = await res.json();
+    populateMapLapSelector();
+    document.getElementById('map-loading').style.display = 'none';
+
+    // Update speed legend label
+    if (trackData.points.length) {
+      const maxSpd = Math.max(...trackData.points.map(p => p.spd));
+      document.getElementById('max-speed-lbl').textContent = `${Math.round(maxSpd)} km/h`;
+    }
+
+    // Show event summary in bar
+    updateMapEventBar();
+
+    // Draw if track map tab is active
+    if (document.getElementById('tab-trackmap').classList.contains('active')) {
+      drawCurrentMap();
+    }
+  } catch (e) {
+    document.getElementById('map-loading').textContent = 'TRACK DATA UNAVAILABLE';
+  }
+}
+
+function populateMapLapSelector() {
+  const sel = document.getElementById('map-lap-select');
+  sel.innerHTML = '<option value="">All laps</option>';
+  if (!trackData) return;
+  for (const lap of trackData.laps) {
+    const opt = document.createElement('option');
+    opt.value = lap;
+    opt.textContent = `Lap ${lap}`;
+    sel.appendChild(opt);
+  }
+  mapLap = null;
+  sel.value = '';
+}
+
+function onMapLapChange() {
+  const v = document.getElementById('map-lap-select').value;
+  mapLap   = v === '' ? null : parseInt(v, 10);
+  updateMapEventBar();
+  drawCurrentMap();
+}
+
+function setMapView(mode) {
+  mapView = mode;
+  document.getElementById('btn2d').classList.toggle('active', mode === '2d');
+  document.getElementById('btn3d').classList.toggle('active', mode === '3d');
+  drawCurrentMap();
+}
+
+function updateMapEventBar() {
+  const bar = document.getElementById('map-event-bar');
+  if (!trackData) { bar.innerHTML = ''; return; }
+
+  // Filter events for the visible lap range
+  let points  = trackData.points;
+  let contacts = trackData.contacts;
+  let jumps    = trackData.jumps;
+
+  if (mapLap != null) {
+    const range = trackData.lap_ranges?.[String(mapLap)];
+    if (range) {
+      const [lo, hi] = range;
+      contacts = contacts.filter(c => c.idx >= lo && c.idx <= hi);
+      jumps    = jumps.filter(j => j.start_idx >= lo && j.end_idx <= hi);
+    }
+  }
+
+  const parts = [];
+  if (contacts.length) {
+    const maxG = Math.max(...contacts.map(c => c.g)).toFixed(1);
+    parts.push(`<span style="color:var(--red)">●</span> ${contacts.length} contact${contacts.length !== 1 ? 's' : ''} (peak ${maxG} G)`);
+  }
+  if (jumps.length) {
+    parts.push(`<span style="color:var(--cyan)">─</span> ${jumps.length} jump${jumps.length !== 1 ? 's' : ''}`);
+  }
+  if (!contacts.length && !jumps.length && trackData.points.length) {
+    parts.push('<span style="color:var(--muted)">No contacts or jumps detected</span>');
+  }
+  bar.innerHTML = parts.join('  ·  ');
+}
+
+// ── Canvas drawing ──────────────────────────────────────────────────────────
+
+function drawCurrentMap() {
+  if (!trackData || !trackData.points.length) return;
+  const canvas = document.getElementById('track-canvas');
+  const wrap   = document.getElementById('map-canvas-wrap');
+  const dpr    = devicePixelRatio || 1;
+  const W      = wrap.clientWidth;
+  const H      = wrap.clientHeight;
+  if (!W || !H) return;
+  canvas.width  = Math.floor(W * dpr);
+  canvas.height = Math.floor(H * dpr);
+  canvas.style.width  = W + 'px';
+  canvas.style.height = H + 'px';
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+
+  // Filter points by lap selection
+  let pts = mapLap != null
+    ? trackData.points.filter(p => p.lap === mapLap)
+    : trackData.points;
+  if (!pts.length) return;
+
+  const maxSpd = Math.max(...pts.map(p => p.spd)) || 1;
+
+  function speedColor(spd) {
+    const t   = Math.min(spd / maxSpd, 1);
+    const hue = 240 - t * 240;
+    return `hsl(${hue},100%,${50 + (1-t)*5}%)`;
+  }
+
+  if (mapView === '2d') {
+    draw2DMap(ctx, W, H, pts, trackData.contacts, trackData.jumps, speedColor);
+  } else {
+    draw3DMap(ctx, W, H, pts, trackData.contacts, trackData.jumps, trackData.bounds, speedColor);
+  }
+}
+
+function draw2DMap(ctx, W, H, pts, contacts, jumps, speedColor) {
+  ctx.clearRect(0, 0, W, H);
+
+  const pad = 28;
+  const xs  = pts.map(p => p.x), zs = pts.map(p => p.z);
+  const minX = Math.min(...xs), maxX = Math.max(...xs);
+  const minZ = Math.min(...zs), maxZ = Math.max(...zs);
+  const rangeX = maxX - minX || 1, rangeZ = maxZ - minZ || 1;
+  const scaleX = (W - pad*2) / rangeX;
+  const scaleZ = (H - pad*2) / rangeZ;
+  const scale  = Math.min(scaleX, scaleZ);
+  const offX   = (W - rangeX * scale) / 2;
+  const offZ   = (H - rangeZ * scale) / 2;
+
+  function project(x, z) {
+    return { cx: offX + (x - minX) * scale, cy: offZ + (z - minZ) * scale };
+  }
+
+  // Dark ground fill
+  ctx.fillStyle = '#07070e';
+  ctx.fillRect(0, 0, W, H);
+
+  // Track shadow (wider, dark)
+  ctx.lineWidth = 7;
+  ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.beginPath();
+  for (let i = 0; i < pts.length; i++) {
+    const {cx,cy} = project(pts[i].x, pts[i].z);
+    i === 0 ? ctx.moveTo(cx,cy) : ctx.lineTo(cx,cy);
+  }
+  ctx.stroke();
+
+  // Colored track (speed gradient)
+  ctx.lineWidth = 3;
+  ctx.lineCap   = 'round';
+  for (let i = 1; i < pts.length; i++) {
+    const a = project(pts[i-1].x, pts[i-1].z);
+    const b = project(pts[i].x,   pts[i].z);
+    ctx.beginPath();
+    ctx.strokeStyle = speedColor((pts[i].spd + pts[i-1].spd) / 2);
+    ctx.moveTo(a.cx, a.cy);
+    ctx.lineTo(b.cx, b.cy);
+    ctx.stroke();
+  }
+
+  // Jumps (dashed cyan)
+  for (const j of jumps) {
+    const si = Math.min(j.start_idx, pts.length - 1);
+    const ei = Math.min(j.end_idx,   pts.length - 1);
+    const a  = project(pts[si].x, pts[si].z);
+    const b  = project(pts[ei].x, pts[ei].z);
+    ctx.beginPath();
+    ctx.strokeStyle = '#00c8f0';
+    ctx.lineWidth   = 3;
+    ctx.setLineDash([5, 4]);
+    ctx.moveTo(a.cx, a.cy); ctx.lineTo(b.cx, b.cy);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  // Contacts (red dots)
+  for (const c of contacts) {
+    if (c.idx >= pts.length) continue;
+    const {cx,cy} = project(pts[c.idx].x, pts[c.idx].z);
+    ctx.beginPath();
+    ctx.arc(cx, cy, 5, 0, Math.PI * 2);
+    ctx.fillStyle = '#e03838';
+    ctx.fill();
+    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = '#ff8888';
+    ctx.stroke();
+  }
+
+  // Start marker
+  const s0 = project(pts[0].x, pts[0].z);
+  ctx.beginPath();
+  ctx.arc(s0.cx, s0.cy, 5, 0, Math.PI * 2);
+  ctx.fillStyle = '#ffffff';
+  ctx.fill();
+}
+
+function draw3DMap(ctx, W, H, pts, contacts, jumps, bounds, speedColor) {
+  ctx.clearRect(0, 0, W, H);
+
+  const cX = (bounds.minX + bounds.maxX) / 2;
+  const cZ = (bounds.minZ + bounds.maxZ) / 2;
+  const rangeXZ = Math.max(bounds.maxX - bounds.minX, bounds.maxZ - bounds.minZ) || 1;
+  const SQRT2 = 1.41421356;
+
+  // Elevation exaggeration: show up to 40% of horizontal extent
+  const elevExag = Math.min(0.5, (bounds.maxY - bounds.minY) / rangeXZ * 4);
+
+  function project3D(x, y, z) {
+    const nx = (x - cX) / rangeXZ;
+    const nz = (z - cZ) / rangeXZ;
+    const ny = (y - bounds.minY) / rangeXZ; // physical proportion, no normalize
+
+    // Standard isometric projection
+    const isoX = (nx - nz) / SQRT2;
+    const isoY = (nx + nz) / (2 * SQRT2) - ny * elevExag;
+
+    const scale = Math.min(W, H) * 0.42;
+    return { cx: W/2 + isoX * scale, cy: H/2 + isoY * scale };
+  }
+
+  ctx.fillStyle = '#07070e';
+  ctx.fillRect(0, 0, W, H);
+
+  // Ground shadow
+  ctx.lineWidth   = 7;
+  ctx.strokeStyle = 'rgba(0,0,0,0.4)';
+  ctx.lineCap     = 'round';
+  ctx.lineJoin    = 'round';
+  ctx.beginPath();
+  for (let i = 0; i < pts.length; i++) {
+    const {cx,cy} = project3D(pts[i].x, bounds.minY, pts[i].z);
+    i === 0 ? ctx.moveTo(cx,cy) : ctx.lineTo(cx,cy);
+  }
+  ctx.stroke();
+
+  // Colored track
+  ctx.lineWidth = 2.5;
+  ctx.lineCap   = 'round';
+  for (let i = 1; i < pts.length; i++) {
+    const a = project3D(pts[i-1].x, pts[i-1].y, pts[i-1].z);
+    const b = project3D(pts[i].x,   pts[i].y,   pts[i].z);
+    ctx.beginPath();
+    ctx.strokeStyle = speedColor((pts[i].spd + pts[i-1].spd) / 2);
+    ctx.moveTo(a.cx, a.cy);
+    ctx.lineTo(b.cx, b.cy);
+    ctx.stroke();
+  }
+
+  // Jumps
+  for (const j of jumps) {
+    const si = Math.min(j.start_idx, pts.length - 1);
+    const ei = Math.min(j.end_idx,   pts.length - 1);
+    const a  = project3D(pts[si].x, pts[si].y, pts[si].z);
+    const b  = project3D(pts[ei].x, pts[ei].y, pts[ei].z);
+    ctx.beginPath();
+    ctx.strokeStyle = '#00c8f0';
+    ctx.lineWidth   = 3;
+    ctx.setLineDash([5,4]);
+    ctx.moveTo(a.cx, a.cy); ctx.lineTo(b.cx, b.cy);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  // Contacts
+  for (const c of contacts) {
+    if (c.idx >= pts.length) continue;
+    const {cx,cy} = project3D(pts[c.idx].x, pts[c.idx].y, pts[c.idx].z);
+    ctx.beginPath();
+    ctx.arc(cx, cy, 5, 0, Math.PI * 2);
+    ctx.fillStyle = '#e03838';
+    ctx.fill();
+    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = '#ff8888';
+    ctx.stroke();
+  }
+
+  // Start
+  const s0 = project3D(pts[0].x, pts[0].y, pts[0].z);
+  ctx.beginPath();
+  ctx.arc(s0.cx, s0.cy, 5, 0, Math.PI * 2);
+  ctx.fillStyle = '#ffffff';
+  ctx.fill();
+
+  // Elevation indicator (only if meaningful)
+  const elevRange = bounds.maxY - bounds.minY;
+  if (elevRange > 5) {
+    ctx.fillStyle = 'rgba(255,255,255,0.35)';
+    ctx.font = '10px Courier New';
+    ctx.textAlign = 'right';
+    ctx.fillText(`↕ ${Math.round(elevRange)} m elev`, W - 10, H - 10);
+  }
+}
+
+// ── Track canvas resize ─────────────────────────────────────────────────────
+function initMapObserver() {
+  if (_mapObserver) _mapObserver.disconnect();
+  const wrap = document.getElementById('map-canvas-wrap');
+  _mapObserver = new ResizeObserver(() => {
+    if (document.getElementById('tab-trackmap').classList.contains('active')) {
+      drawCurrentMap();
+    }
+  });
+  _mapObserver.observe(wrap);
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Lap Compare
+// ══════════════════════════════════════════════════════════════════════════════
+function buildComparePicker(laps) {
+  const grid = document.getElementById('compare-lap-grid');
+  selectedLaps.clear();
+  // Color keyed by lap_number mod 5 — consistent with legend and chart rendering
+  grid.innerHTML = laps.map(l => {
+    const col = CMP_COLORS[l.lap_number % CMP_COLORS.length];
+    return `<button class="cmp-lap-btn" data-lap="${l.lap_number}"
+               data-col="${col}"
+               onclick="toggleCompareLap(this)">${fmtTime(l.lap_time)} <span style="opacity:0.5">L${l.lap_number}</span></button>`;
+  }).join('');
+}
+
+function toggleCompareLap(btn) {
+  const lap = parseInt(btn.dataset.lap, 10);
+  const col = btn.dataset.col;
+  if (btn.classList.contains('sel')) {
+    btn.classList.remove('sel');
+    btn.style.background = '';
+    btn.style.color      = '';
+    selectedLaps.delete(lap);
+  } else {
+    if (selectedLaps.size >= 5) {
+      const msg = document.createElement('span');
+      msg.textContent = ' max 5 laps';
+      msg.style.cssText = 'font-size:0.65rem;color:var(--red);margin-left:4px';
+      btn.parentElement.appendChild(msg);
+      setTimeout(() => msg.remove(), 2000);
+      return;
+    }
+    btn.classList.add('sel');
+    btn.style.background = col;
+    btn.style.color      = '#07070e';
+    selectedLaps.add(lap);
+  }
+}
+
+async function runCompare() {
+  if (!activeSession || !selectedLaps.size) return;
+  const lapStr = [...selectedLaps].sort((a,b) => a-b).join(',');
+  const wrap   = document.getElementById('compare-charts-wrap');
+  wrap.innerHTML = '<div style="padding:32px;text-align:center;color:var(--muted);font-size:0.78rem;letter-spacing:1px">LOADING…</div>';
+
+  try {
+    const res  = await fetch(`/api/sessions/${activeSession.session_id}/compare?laps=${lapStr}`);
+    compareData = await res.json();
+  } catch {
+    wrap.innerHTML = '<div style="padding:32px;text-align:center;color:var(--red);font-size:0.78rem">Failed to load comparison data</div>';
+    return;
+  }
+
+  if (!compareData.length) {
+    wrap.innerHTML = '<div style="padding:32px;text-align:center;color:var(--muted);font-size:0.78rem;letter-spacing:1px">NO DATA — telemetry may not include this lap</div>';
+    return;
+  }
+
+  // Build legend
+  const legend = document.getElementById('cmp-legend');
+  const allLaps = [...selectedLaps].sort((a,b) => a-b);
+  legend.innerHTML = allLaps.map(lap => {
+    const col = CMP_COLORS[lap % CMP_COLORS.length];
+    return `<div class="cmp-leg">
+      <div class="cmp-leg-line" style="background:${col}"></div>
+      <span>Lap ${lap}</span>
+    </div>`;
+  }).join('');
+
+  renderCompareCharts();
+}
+
+function renderCompareCharts() {
+  const wrap   = document.getElementById('compare-charts-wrap');
+  wrap.innerHTML = '';
+
+  const metrics = [
+    { key:'spd', label:'SPEED',    unit:'km/h', yMin:0, yMax:null, highlight:false },
+    { key:'thr', label:'THROTTLE', unit:'%',    yMin:0, yMax:100,  highlight:true  },
+    { key:'brk', label:'BRAKE',    unit:'%',    yMin:0, yMax:100,  highlight:true  },
+    { key:'str', label:'STEERING', unit:'',     yMin:-1, yMax:1,   highlight:false },
+  ];
+
+  metrics.forEach((m, mi) => {
+    const isLast = mi === metrics.length - 1;
+    const row    = document.createElement('div');
+    row.className = 'chart-canvas-row';
+    row.style.borderBottom = isLast ? 'none' : '1px solid var(--border)';
+    const canvas = document.createElement('canvas');
+    canvas.height = 100;
+    row.appendChild(canvas);
+    wrap.appendChild(row);
+
+    // Defer draw until layout settles
+    requestAnimationFrame(() => {
+      const W  = wrap.clientWidth || 600;
+      const dpr = devicePixelRatio || 1;
+      canvas.width  = Math.floor(W * dpr);
+      canvas.height = 100 * dpr;
+      canvas.style.width  = W + 'px';
+      canvas.style.height = '100px';
+      const ctx = canvas.getContext('2d');
+      ctx.scale(dpr, dpr);
+      drawCompareChart(ctx, W, 100, m.key, m.label, m.unit, m.yMin, m.yMax, isLast, compareData);
+    });
+  });
+}
+
+function drawCompareChart(ctx, W, H, key, label, unit, yMin, yMax, showXAxis, data) {
+  const padL = 52, padR = 14, padT = 20, padB = showXAxis ? 24 : 6;
+  const plotW = W - padL - padR;
+  const plotH = H - padT - padB;
+
+  // Compute Y range
+  let minVal = yMin, maxVal = yMax;
+  if (maxVal == null) {
+    maxVal = 0;
+    for (const d of data)
+      for (const p of d.data) maxVal = Math.max(maxVal, p[key]);
+    maxVal = Math.ceil(maxVal / 20) * 20 || 100;
+  }
+  const maxDist = Math.max(...data.map(d => d.max_dist), 1);
+
+  // BG
+  ctx.fillStyle = '#07070e';
+  ctx.fillRect(0, 0, W, H);
+
+  // Y grid + labels
+  const GRID_N = key === 'str' ? 4 : 4;
+  ctx.strokeStyle = 'rgba(26,26,56,0.8)';
+  ctx.lineWidth   = 0.5;
+  for (let i = 0; i <= GRID_N; i++) {
+    const y   = padT + (plotH / GRID_N) * i;
+    const val = maxVal - (maxVal - minVal) * i / GRID_N;
+    ctx.beginPath();
+    ctx.moveTo(padL, y); ctx.lineTo(padL + plotW, y);
+    ctx.stroke();
+    ctx.fillStyle  = '#44446a';
+    ctx.font       = '9px Courier New';
+    ctx.textAlign  = 'right';
+    ctx.fillText(
+      key === 'str' ? val.toFixed(1) : Math.round(val) + (unit || ''),
+      padL - 4, y + 3
+    );
+  }
+
+  // X grid
+  for (let i = 0; i <= 4; i++) {
+    const x    = padL + (plotW / 4) * i;
+    const dist = (maxDist / 4) * i;
+    ctx.strokeStyle = 'rgba(26,26,56,0.5)';
+    ctx.lineWidth   = 0.5;
+    ctx.beginPath();
+    ctx.moveTo(x, padT); ctx.lineTo(x, padT + plotH);
+    ctx.stroke();
+    if (showXAxis) {
+      ctx.fillStyle = '#44446a';
+      ctx.font      = '9px Courier New';
+      ctx.textAlign = 'center';
+      ctx.fillText(
+        dist < 1000 ? `${Math.round(dist)}m` : `${(dist/1000).toFixed(1)}km`,
+        x, H - 4
+      );
+    }
+  }
+
+  // Zero line for steering
+  if (key === 'str') {
+    const y0 = padT + plotH - (0 - minVal) / (maxVal - minVal) * plotH;
+    ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+    ctx.lineWidth   = 1;
+    ctx.beginPath();
+    ctx.moveTo(padL, y0); ctx.lineTo(padL + plotW, y0);
+    ctx.stroke();
+  }
+
+  // Chart label
+  ctx.fillStyle = '#8888b8';
+  ctx.font      = 'bold 9px Courier New';
+  ctx.textAlign = 'left';
+  ctx.fillText(label, padL + 4, padT - 4);
+
+  // Border
+  ctx.strokeStyle = '#1a1a38';
+  ctx.lineWidth   = 1;
+  ctx.strokeRect(padL, padT, plotW, plotH);
+
+  // Lines per lap
+  data.forEach((lapData, li) => {
+    const color = CMP_COLORS[lapData.lap % CMP_COLORS.length];
+    ctx.strokeStyle = color;
+    ctx.lineWidth   = 1.5;
+    ctx.lineJoin    = 'round';
+    ctx.lineCap     = 'round';
+
+    ctx.beginPath();
+    let moved = false;
+    for (const p of lapData.data) {
+      const x   = padL + (p.d / maxDist) * plotW;
+      const val = p[key];
+      const clamped = Math.max(minVal, Math.min(maxVal, val));
+      const y   = padT + plotH - (clamped - minVal) / (maxVal - minVal) * plotH;
+      if (!moved) { ctx.moveTo(x, y); moved = true; }
+      else          ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  });
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Boot
+// ══════════════════════════════════════════════════════════════════════════════
+document.getElementById('filter-input').addEventListener('input', renderSessionList);
+
+async function init() {
+  await loadCarNames();
+  try {
+    const res  = await fetch('/api/sessions');
+    allSessions = await res.json();
+    buildClassPills();
+    renderSessionList();
+  } catch {
+    document.getElementById('session-list').innerHTML =
+      '<div style="padding:30px;text-align:center;color:var(--red);font-size:0.8rem">Failed to load sessions</div>';
+  }
+  initMapObserver();
+}
+
+init();
+</script>
+</body>
+</html>
