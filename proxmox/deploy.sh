@@ -97,6 +97,7 @@ pct create "$CTID" "local:vztmpl/$TMPL" \
   --net0        "name=eth0,bridge=${BRIDGE},ip=${IP}" \
   --unprivileged 0                           \
   --features    nesting=1                    \
+  --tags        pitlane                      \
   --onboot      1                            \
   --start       1
 
@@ -212,6 +213,44 @@ UNIT
 systemctl daemon-reload
 systemctl enable pitlane.service --quiet
 
+# ── Console auto-login (TTY only — SSH still requires the root password) ──────
+log "Configuring console auto-login…"
+GETTY_OVERRIDE="/etc/systemd/system/container-getty@1.service.d/override.conf"
+mkdir -p "$(dirname "$GETTY_OVERRIDE")"
+cat > "$GETTY_OVERRIDE" << 'GETTY'
+[Service]
+ExecStart=
+ExecStart=-/sbin/agetty --autologin root --noclear --keep-baud tty%I 115200,38400,9600 $TERM
+GETTY
+systemctl daemon-reload
+
+# ── MOTD (shown on every login) ───────────────────────────────────────────────
+log "Installing MOTD…"
+# Disable the default dynamic MOTD scripts
+[[ -d /etc/update-motd.d ]] && chmod -x /etc/update-motd.d/* 2>/dev/null || true
+# Write a profile.d script that prints info on interactive login
+cat > /etc/profile.d/00_pitlane.sh << 'MOTD'
+[ -t 1 ] || return 0
+IP=$(hostname -I 2>/dev/null | awk '{print $1}')
+echo ""
+echo "  PitLane — Forza telemetry stack"
+echo ""
+echo "    Dashboard   http://${IP}:8080"
+echo "    Grafana     http://${IP}:3000"
+echo "    Forza UDP   ${IP}:5302"
+echo ""
+echo "  Type 'update' to pull the latest code and restart the stack."
+echo ""
+MOTD
+# Ensure TERM is set for colour in the console
+grep -qxF "export TERM='xterm-256color'" /root/.bashrc \
+  || echo "export TERM='xterm-256color'" >> /root/.bashrc
+
+# ── 'update' command shortcut ─────────────────────────────────────────────────
+log "Installing 'update' command…"
+echo 'bash /opt/pitlane/proxmox/update.sh' > /usr/bin/update
+chmod +x /usr/bin/update
+
 # ── Start ─────────────────────────────────────────────────────────────────────
 log "Starting PitLane stack…"
 docker compose up -d
@@ -273,7 +312,9 @@ echo -e "  ${Y}Generated credentials${N}"
 [[ -n "${IDB_PASS:-}"  ]] && printf "  %-22s %s\n" "InfluxDB password:" "$IDB_PASS"
 echo -e "  ${Y}(Full .env: pct exec ${CTID} -- cat /opt/pitlane/.env)${N}"
 echo ""
-echo -e "  To update later:  ${C}pct exec ${CTID} -- bash /opt/pitlane/proxmox/update.sh${N}"
-echo -e "  Shell access:     ${C}pct enter ${CTID}${N}  (password above, or: pct exec ${CTID} -- bash)"
+echo -e "  To update:        open the LXC console and type ${C}update${N}"
+echo -e "  (or from host):   ${C}pct exec ${CTID} -- bash /opt/pitlane/proxmox/update.sh${N}"
+echo -e "  Console access:   auto-login (no password prompt at TTY)"
+echo -e "  SSH access:       ${C}ssh root@${LXC_IP}${N}  (root password above)"
 echo ""
 hr
