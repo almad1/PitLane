@@ -34,6 +34,15 @@ RELAY_FILE    = os.environ.get("RELAY_FILE", "/relay/latest.json")
 
 STALE_SECS = 5.0
 
+_VERSION_FILE = os.path.join(os.path.dirname(__file__), "..", "VERSION")
+
+def _read_version() -> str:
+    try:
+        with open(_VERSION_FILE) as f:
+            return f.read().strip()
+    except OSError:
+        return "unknown"
+
 # ── In-memory live state ───────────────────────────────────────────────────────
 _telemetry: dict = {}
 _last_recv: float = 0.0
@@ -479,6 +488,81 @@ from(bucket: "{INFLUX_BUCKET}")
     except Exception as exc:
         log.warning("Compare query failed: %s", exc)
         return JSONResponse([])
+
+
+@app.get("/api/version")
+async def version():
+    return JSONResponse({"version": _read_version()})
+
+
+@app.get("/api/analysis/telemetry")
+async def analysis_telemetry(session_id: str = "", minutes: int = 5):
+    """Return ~10 Hz time-series telemetry for the driver-inputs / speed-engine / G-force charts.
+
+    If session_id is given, returns that session's full telemetry (downsampled).
+    Otherwise returns the most recent `minutes` of data across all sessions.
+    """
+    def _fetch():
+        fields = [
+            "throttle_pct", "brake_pct", "clutch_pct",
+            "speed_kmh", "engine_rpm", "engine_max_rpm",
+            "g_lateral", "g_longitudinal",
+        ]
+        field_filter = " or ".join(f'r._field == "{f}"' for f in fields)
+
+        if session_id:
+            sid_filter = f'|> filter(fn: (r) => r.session_id == "{session_id}")'
+            range_str  = "start: -365d"
+        else:
+            sid_filter = ""
+            range_str  = f"start: -{minutes}m"
+
+        flux = f"""
+from(bucket: "{INFLUX_BUCKET}")
+  |> range({range_str})
+  |> filter(fn: (r) => r._measurement == "telemetry")
+  {sid_filter}
+  |> filter(fn: (r) => {field_filter})
+  |> pivot(rowKey: ["_time"], columnKey: ["_field"], valueColumn: "_value")
+  |> sort(columns: ["_time"])
+"""
+        rows = _query(flux)
+
+        # Thin to ≤1200 points (~2 min at 10 Hz)
+        step = max(1, len(rows) // 1200)
+        rows = rows[::step]
+
+        def fv(row, key, default=0.0):
+            v = row.get(key)
+            return float(v) if v is not None else default
+
+        points = []
+        t0 = None
+        for row in rows:
+            ts = row.get("_time")
+            if ts is None:
+                continue
+            t_s = ts.timestamp() if hasattr(ts, "timestamp") else float(str(ts)[:10])
+            if t0 is None:
+                t0 = t_s
+            points.append({
+                "t":   round(t_s - t0, 2),
+                "thr": round(fv(row, "throttle_pct"), 1),
+                "brk": round(fv(row, "brake_pct"), 1),
+                "clt": round(fv(row, "clutch_pct"), 1),
+                "spd": round(fv(row, "speed_kmh"), 1),
+                "rpm": round(fv(row, "engine_rpm")),
+                "mrpm": round(fv(row, "engine_max_rpm")),
+                "gL":  round(fv(row, "g_lateral"), 3),
+                "gN":  round(fv(row, "g_longitudinal"), 3),
+            })
+        return {"points": points, "duration": round(points[-1]["t"], 1) if points else 0}
+
+    try:
+        return JSONResponse(await run_in_threadpool(_fetch))
+    except Exception as exc:
+        log.warning("Analysis telemetry query failed: %s", exc)
+        return JSONResponse({"points": [], "duration": 0})
 
 
 @app.get("/api/laps")

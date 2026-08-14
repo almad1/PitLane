@@ -320,6 +320,7 @@ td { padding: 7px 10px; vertical-align: middle; white-space: nowrap; }
         <button class="tab-btn active" data-tab="overview"  onclick="switchTab('overview')">Overview</button>
         <button class="tab-btn"        data-tab="trackmap"  onclick="switchTab('trackmap')">Track Map</button>
         <button class="tab-btn"        data-tab="compare"   onclick="switchTab('compare')">Lap Compare</button>
+        <button class="tab-btn"        data-tab="analysis"  onclick="switchTab('analysis')">Analysis</button>
       </div>
 
       <!-- ── Overview tab ──────────────────────────────────────────────────── -->
@@ -375,6 +376,25 @@ td { padding: 7px 10px; vertical-align: middle; white-space: nowrap; }
           <div id="cmp-legend"></div>
         </div>
         <div id="compare-charts-wrap"></div>
+      </div>
+
+      <!-- ── Analysis tab ─────────────────────────────────────────────────── -->
+      <div id="tab-analysis" class="tab-panel" style="display:flex;flex-direction:column;gap:12px;overflow-y:auto;padding:12px;">
+        <div id="analysis-controls" style="display:flex;align-items:center;gap:12px;flex-shrink:0">
+          <span style="font-size:0.7rem;color:var(--muted);letter-spacing:2px">RANGE</span>
+          <select id="analysis-minutes" style="background:var(--bg);border:1px solid var(--border2);color:var(--text);padding:4px 8px;border-radius:3px;font-size:0.75rem">
+            <option value="5" selected>Last 5 min</option>
+            <option value="10">Last 10 min</option>
+            <option value="30">Last 30 min</option>
+          </select>
+          <button onclick="loadAnalysis()" style="padding:4px 12px;background:rgba(232,160,32,0.15);border:1px solid var(--accent);color:var(--accent);border-radius:3px;font-size:0.72rem;cursor:pointer;letter-spacing:1px">LOAD</button>
+          <span id="analysis-status" style="font-size:0.7rem;color:var(--muted)"></span>
+          <label id="analysis-cursor-label" style="display:none;font:0.7rem var(--font-mono);color:var(--text-dim);margin-left:auto"></label>
+        </div>
+        <div id="analysis-chart-inputs"  style="position:relative"><canvas id="ac-inputs"  height="120" style="width:100%;display:block"></canvas></div>
+        <div id="analysis-chart-speed"   style="position:relative"><canvas id="ac-speed"   height="120" style="width:100%;display:block"></canvas></div>
+        <div id="analysis-chart-gforce"  style="position:relative"><canvas id="ac-gforce"  height="120" style="width:100%;display:block"></canvas></div>
+        <div id="analysis-cursor-bar"    style="position:fixed;top:0;width:1px;background:rgba(232,160,32,0.5);pointer-events:none;display:none;z-index:10"></div>
       </div>
 
     </div><!-- #session-view -->
@@ -563,17 +583,6 @@ function toggleClass(cls) {
 // ══════════════════════════════════════════════════════════════════════════════
 // Session Detail
 // ══════════════════════════════════════════════════════════════════════════════
-function switchTab(name) {
-  document.querySelectorAll('.tab-btn').forEach(b =>
-    b.classList.toggle('active', b.dataset.tab === name));
-  document.querySelectorAll('.tab-panel').forEach(p =>
-    p.classList.toggle('active', p.id === 'tab-' + name));
-
-  if (name === 'trackmap') {
-    // Ensure canvas is correctly sized after tab becomes visible
-    requestAnimationFrame(() => drawCurrentMap());
-  }
-}
 
 async function selectSession(sid) {
   const s = allSessions.find(x => x.session_id === sid);
@@ -1231,6 +1240,226 @@ function drawCompareChart(ctx, W, H, key, label, unit, yMin, yMax, showXAxis, da
     ctx.stroke();
   });
 }
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Analysis Tab — time-series charts
+// ══════════════════════════════════════════════════════════════════════════════
+let _analysisPoints = [];
+
+function switchTab(name) {
+  document.querySelectorAll('.tab-btn').forEach(b =>
+    b.classList.toggle('active', b.dataset.tab === name));
+  document.querySelectorAll('.tab-panel').forEach(p =>
+    p.classList.toggle('active', p.id === 'tab-' + name));
+
+  if (name === 'trackmap') {
+    requestAnimationFrame(() => drawCurrentMap());
+  }
+  if (name === 'analysis') {
+    requestAnimationFrame(() => drawAnalysisCharts());
+  }
+}
+
+async function loadAnalysis() {
+  const minutes = document.getElementById('analysis-minutes').value;
+  const sid     = activeSession ? activeSession.session_id : '';
+  const statusEl = document.getElementById('analysis-status');
+  statusEl.textContent = 'Loading…';
+
+  try {
+    const url = sid
+      ? `/api/analysis/telemetry?session_id=${sid}&minutes=${minutes}`
+      : `/api/analysis/telemetry?minutes=${minutes}`;
+    const res  = await fetch(url);
+    const data = await res.json();
+    _analysisPoints = data.points || [];
+    statusEl.textContent = `${_analysisPoints.length} points · ${data.duration}s`;
+    drawAnalysisCharts();
+  } catch (e) {
+    statusEl.textContent = 'Load failed';
+  }
+}
+
+function drawAnalysisChart(canvasId, series, opts) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+  const W = canvas.parentElement.offsetWidth || 700;
+  canvas.width  = W;
+  canvas.height = canvas.height || 120;
+  const H   = canvas.height;
+  const ctx = canvas.getContext('2d');
+  const pad = { t: 20, b: 28, l: 50, r: 16 };
+  const pw  = W - pad.l - pad.r;
+  const ph  = H - pad.t - pad.b;
+
+  ctx.clearRect(0, 0, W, H);
+
+  // Background
+  ctx.fillStyle = 'rgba(13,13,28,0.6)';
+  ctx.fillRect(0, 0, W, H);
+
+  if (!_analysisPoints.length) {
+    ctx.fillStyle = '#44446a';
+    ctx.font = '12px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('Click LOAD to fetch telemetry', W / 2, H / 2);
+    return;
+  }
+
+  const points = opts.preprocess ? opts.preprocess(_analysisPoints) : _analysisPoints;
+  const tMax   = points[points.length - 1].t || 1;
+
+  // Grid lines
+  ctx.strokeStyle = '#1a1a38';
+  ctx.lineWidth   = 0.5;
+  for (let g = 0; g <= 4; g++) {
+    const y = pad.t + (g / 4) * ph;
+    ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(pad.l + pw, y); ctx.stroke();
+  }
+
+  // Y-axis labels
+  ctx.fillStyle = '#44446a';
+  ctx.font = '9px monospace';
+  ctx.textAlign = 'right';
+  for (let g = 0; g <= 4; g++) {
+    const v   = opts.max - (g / 4) * (opts.max - opts.min);
+    const y   = pad.t + (g / 4) * ph;
+    ctx.fillText(opts.fmt ? opts.fmt(v) : Math.round(v), pad.l - 4, y + 3);
+  }
+
+  // X-axis labels
+  ctx.textAlign = 'center';
+  const tickCount = Math.min(10, Math.floor(tMax / 10));
+  for (let i = 0; i <= tickCount; i++) {
+    const t = (i / tickCount) * tMax;
+    const x = pad.l + (t / tMax) * pw;
+    const mins = Math.floor(t / 60);
+    const secs = Math.floor(t % 60);
+    ctx.fillText(`${mins}:${String(secs).padStart(2,'0')}`, x, H - 8);
+  }
+
+  // Chart title
+  ctx.fillStyle = '#55558a';
+  ctx.font = '700 9px monospace';
+  ctx.textAlign = 'left';
+  ctx.fillText(opts.title.toUpperCase(), pad.l + 4, pad.t - 6);
+
+  // Series
+  for (const s of series) {
+    ctx.strokeStyle = s.color;
+    ctx.lineWidth   = 1.5;
+    ctx.lineJoin    = 'round';
+    ctx.beginPath();
+    let moved = false;
+    for (const pt of points) {
+      const x = pad.l + (pt.t / tMax) * pw;
+      const v = pt[s.key] ?? 0;
+      const clamped = Math.max(opts.min, Math.min(opts.max, v));
+      const y = pad.t + ph - ((clamped - opts.min) / (opts.max - opts.min)) * ph;
+      if (!moved) { ctx.moveTo(x, y); moved = true; }
+      else          ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+
+    // Legend label
+    if (s.label) {
+      ctx.fillStyle = s.color;
+      ctx.font = '700 9px monospace';
+      ctx.textAlign = 'right';
+      // stack legend entries right side
+      ctx.fillText(s.label, W - pad.r - (series.indexOf(s) * 60), pad.t - 6);
+    }
+  }
+
+  // Border
+  ctx.strokeStyle = '#1a1a38';
+  ctx.lineWidth = 0.8;
+  ctx.strokeRect(pad.l, pad.t, pw, ph);
+}
+
+function drawAnalysisCharts() {
+  drawAnalysisChart('ac-inputs', [
+    { key: 'thr', color: '#28cc88', label: 'THROTTLE' },
+    { key: 'brk', color: '#e03838', label: 'BRAKE' },
+    { key: 'clt', color: '#e8a020', label: 'CLUTCH' },
+  ], { min: 0, max: 100, title: 'Driver Inputs (%)', fmt: v => v + '%' });
+
+  // RPM scaled to 0-400 range (divide by ~maxRpm/400) to overlay with speed
+  drawAnalysisChart('ac-speed', [
+    { key: 'spd',     color: '#00c8f0', label: 'SPEED' },
+    { key: '_rpmscl', color: '#8c3dc8', label: 'RPM%' },
+  ], {
+    min: 0, max: 100, title: 'Speed (km/h scaled) & RPM%',
+    fmt: v => Math.round(v),
+    preprocess: pts => pts.map(p => ({
+      ...p,
+      spd: p.spd / 4,
+      _rpmscl: p.mrpm > 0 ? p.rpm / p.mrpm * 100 : p.rpm / 85,
+    })),
+  });
+
+  drawAnalysisChart('ac-gforce', [
+    { key: 'gL', color: '#00c8f0', label: 'LAT-G' },
+    { key: 'gN', color: '#e8a020', label: 'LON-G' },
+  ], { min: -3, max: 3, title: 'G-Forces (g)', fmt: v => v.toFixed(1) });
+}
+
+// Cursor overlay across all analysis charts
+(function initAnalysisCursor() {
+  const CHARTS = ['ac-inputs', 'ac-speed', 'ac-gforce'];
+  const cursorBar = document.getElementById('analysis-cursor-bar');
+  const label     = document.getElementById('analysis-cursor-label');
+
+  function onMove(e) {
+    if (!_analysisPoints.length) return;
+    const canvas = e.currentTarget;
+    const rect   = canvas.getBoundingClientRect();
+    const x      = e.clientX - rect.left;
+    const W      = canvas.width;
+    const padL   = 50, padR = 16;
+    const pw     = W - padL - padR;
+    if (x < padL || x > padL + pw) { if (cursorBar) cursorBar.style.display = 'none'; return; }
+
+    const tMax  = _analysisPoints[_analysisPoints.length - 1].t || 1;
+    const t     = ((x - padL) / pw) * tMax;
+    const idx   = _analysisPoints.findIndex(p => p.t >= t);
+    const pt    = _analysisPoints[Math.max(0, idx)];
+
+    if (label) {
+      const mins = Math.floor(t / 60);
+      const secs = (t % 60).toFixed(1);
+      label.textContent = `T ${mins}:${String(Math.floor(t % 60)).padStart(2,'0')}  `
+        + `THR ${pt.thr.toFixed(0)}%  BRK ${pt.brk.toFixed(0)}%  `
+        + `${pt.spd.toFixed(0)} km/h  ${Math.round(pt.rpm)} RPM  `
+        + `gLat ${pt.gL.toFixed(2)}  gLon ${pt.gN.toFixed(2)}`;
+      label.style.display = 'inline';
+    }
+
+    if (cursorBar) {
+      cursorBar.style.display = 'block';
+      cursorBar.style.left    = e.clientX + 'px';
+      // span all chart canvases vertically
+      const first = document.getElementById(CHARTS[0]);
+      const last  = document.getElementById(CHARTS[CHARTS.length - 1]);
+      if (first && last) {
+        const topR = first.getBoundingClientRect();
+        const botR = last.getBoundingClientRect();
+        cursorBar.style.top    = topR.top + 'px';
+        cursorBar.style.height = (botR.bottom - topR.top) + 'px';
+      }
+    }
+  }
+
+  function onLeave() {
+    if (cursorBar) cursorBar.style.display = 'none';
+    if (label)     label.style.display = 'none';
+  }
+
+  CHARTS.forEach(id => {
+    const c = document.getElementById(id);
+    if (c) { c.addEventListener('mousemove', onMove); c.addEventListener('mouseleave', onLeave); }
+  });
+})();
 
 // ══════════════════════════════════════════════════════════════════════════════
 // Boot
