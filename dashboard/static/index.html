@@ -366,28 +366,45 @@ body {
 #live-badge.paused { background: rgba(157,78,221,0.15); color: var(--purple); border-color: var(--purple); }
 #live-badge.paused::before { content: '⏸ '; }
 
-/* ── View tab bar ─────────────────────────────────────────────────────────── */
-#view-tabs { display: flex; gap: 2px; }
-.view-tab {
-  font: 700 0.65rem var(--font-mono); letter-spacing: 2px;
-  padding: 4px 12px; border-radius: 3px;
+/* ── Sub-navigation ───────────────────────────────────────────────────────── */
+#sub-nav {
+  display: flex; gap: 2px; padding: 5px 8px;
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.sub-tab {
+  font: 700 0.6rem var(--font-mono); letter-spacing: 2px;
+  padding: 3px 10px; border-radius: 3px;
   background: none; color: var(--muted);
   border: 1px solid transparent; cursor: pointer;
   transition: all 0.15s;
 }
-.view-tab:hover { color: var(--text); border-color: var(--border); }
-.view-tab.active { color: var(--primary); border-color: var(--primary); background: rgba(0,212,255,0.08); }
+.sub-tab:hover { color: var(--text); border-color: var(--border); }
+.sub-tab.active { color: var(--primary); border-color: var(--primary); background: rgba(0,212,255,0.08); }
 
-/* ── View switching ───────────────────────────────────────────────────────── */
-.view-panel { flex: 1; min-height: 0; display: none; overflow: hidden; }
-#dash { display: none; }
-body[data-view="race"]      #dash           { display: grid; }
-body[data-view="cockpit"]   #view-cockpit   { display: flex; }
-body[data-view="telemetry"] #view-telemetry { display: flex; }
-body[data-view="map"]       #view-map-panel { display: flex; }
+/* ── Dashboard layout ─────────────────────────────────────────────────────── */
+#dash { display: flex; flex-direction: column; flex: 1; min-height: 0; padding: 0; gap: 0; }
+#dash-grid {
+  display: grid;
+  grid-template-columns: 280px 140px 1fr 1fr 200px;
+  grid-template-rows: 1fr auto auto;
+  grid-template-areas:
+    "speed  gear    laptime bestlap gforce"
+    "speed  rpm     rpm     rpm     gforce"
+    "inputs inputs  tires   tires   tires";
+  gap: 8px; padding: 8px 8px 0;
+}
 
-/* ── Cockpit view ─────────────────────────────────────────────────────────── */
-#view-cockpit { flex-direction: column; padding: 10px; gap: 10px; }
+/* ── Sub-panel switching ──────────────────────────────────────────────────── */
+#sub-panel { flex: 1; min-height: 0; position: relative; }
+.sub-view { display: none; width: 100%; height: 100%; flex-direction: column; overflow: hidden; }
+#sub-panel[data-sub="cockpit"]   #sub-cockpit   { display: flex; }
+#sub-panel[data-sub="telemetry"] #sub-telemetry { display: flex; }
+#sub-panel[data-sub="map"]       #sub-map       { display: flex; }
+#sub-panel[data-sub="history"]   #sub-history   { display: flex; }
+
+/* ── Cockpit sub-view ─────────────────────────────────────────────────────── */
+#sub-cockpit { padding: 8px; gap: 8px; }
 
 .ck-label {
   font: 0.58rem var(--font-mono); letter-spacing: 2px; color: var(--muted);
@@ -453,8 +470,8 @@ body[data-view="map"]       #view-map-panel { display: flex; }
   box-shadow: 0 0 16px rgba(255,59,59,0.3);
 }
 
-/* ── Telemetry view ───────────────────────────────────────────────────────── */
-#view-telemetry { flex-direction: column; padding: 10px; gap: 8px; overflow-y: auto; }
+/* ── Telemetry sub-view ───────────────────────────────────────────────────── */
+#sub-telemetry { padding: 8px; gap: 8px; overflow-y: auto; }
 .tel-row-label {
   font: 0.58rem var(--font-mono); letter-spacing: 3px; color: var(--muted); text-transform: uppercase;
 }
@@ -478,33 +495,21 @@ body[data-view="map"]       #view-map-panel { display: flex; }
 .tel-ci-val { font: 700 1.4rem var(--font-mono); color: var(--primary); }
 .tel-ci-lbl { font: 0.55rem var(--font-mono); letter-spacing: 2px; color: var(--muted); }
 
-/* ── Map view ─────────────────────────────────────────────────────────────── */
-#view-map-panel { flex-direction: column; padding: 8px; gap: 6px; }
+/* ── Map sub-view ─────────────────────────────────────────────────────────── */
+#sub-map { padding: 8px; gap: 6px; }
 .map-overlay-bar {
   display: flex; gap: 16px; align-items: center; flex-shrink: 0;
   font: 0.65rem var(--font-mono); color: var(--muted);
 }
 .map-overlay-val { color: var(--primary); font-weight: 700; }
-#view-map-full-wrap {
-  flex: 1; min-height: 0; position: relative;
-  border-radius: 6px; overflow: hidden;
-  background: var(--bg);
-}
-#track-map-full { position: absolute; inset: 0; width: 100%; height: 100%; }
 </style>
 </head>
-<body data-view="race">
+<body>
 
 <!-- ── Header ──────────────────────────────────────────────────────────────── -->
 <div id="header">
   <div class="logo">PIT<span>LANE</span></div>
   <div id="session-info">Session <b id="hdr-session">—</b> &nbsp;·&nbsp; <b id="hdr-car">—</b></div>
-  <div id="view-tabs">
-    <button class="view-tab active" data-view="race" onclick="switchView('race')">RACE</button>
-    <button class="view-tab" data-view="cockpit" onclick="switchView('cockpit')">COCKPIT</button>
-    <button class="view-tab" data-view="telemetry" onclick="switchView('telemetry')">TELEMETRY</button>
-    <button class="view-tab" data-view="map" onclick="switchView('map')">MAP</button>
-  </div>
   <div id="live-badge">OFFLINE</div>
   <a href="/analytics.html" style="font-size:0.7rem;color:var(--muted);text-decoration:none;padding:4px 10px;border:1px solid var(--border);border-radius:3px;">Analytics</a>
   <a id="grafana-link" href="http://localhost:3000" target="_blank">Grafana ↗</a>
@@ -512,6 +517,7 @@ body[data-view="map"]       #view-map-panel { display: flex; }
 
 <!-- ── Dashboard ───────────────────────────────────────────────────────────── -->
 <div id="dash">
+<div id="dash-grid">
 
   <!-- Speed gauge -->
   <div class="card card-speed">
@@ -695,10 +701,102 @@ body[data-view="map"]       #view-map-panel { display: flex; }
     <div class="tires-note">PSI — not in Forza telemetry protocol</div>
   </div>
 
-  <!-- Live track map -->
-  <div class="card card-map">
-    <div class="card-label">TRACK MAP</div>
-    <div id="track-canvas-wrap">
+</div><!-- end #dash-grid -->
+
+<!-- Sub-navigation -->
+<div id="sub-nav">
+  <button class="sub-tab active" data-sub="cockpit" onclick="switchSubView('cockpit')">COCKPIT</button>
+  <button class="sub-tab" data-sub="telemetry" onclick="switchSubView('telemetry')">TELEMETRY</button>
+  <button class="sub-tab" data-sub="map" onclick="switchSubView('map')">MAP</button>
+  <button class="sub-tab" data-sub="history" onclick="switchSubView('history')">HISTORY</button>
+</div>
+
+<!-- Sub-panel -->
+<div id="sub-panel" data-sub="cockpit">
+
+  <!-- ── Cockpit ── -->
+  <div id="sub-cockpit" class="sub-view">
+    <div class="ck-steer-section">
+      <div class="ck-label">STEERING</div>
+      <div class="ck-steer-track">
+        <div class="ck-steer-center"></div>
+        <div class="ck-steer-bar" id="ck-steer-bar"></div>
+      </div>
+      <div class="ck-steer-val" id="ck-steer-val">—</div>
+    </div>
+    <div class="ck-shift-section">
+      <div class="ck-shift ck-shift-up" id="ck-shift-up">
+        <div class="ck-shift-arrow">▲</div>
+        <div class="ck-shift-text">UPSHIFT</div>
+      </div>
+      <div class="ck-shift ck-shift-dn" id="ck-shift-dn">
+        <div class="ck-shift-arrow">▼</div>
+        <div class="ck-shift-text">DOWNSHIFT</div>
+      </div>
+    </div>
+    <div class="ck-pedals-section">
+      <div class="ck-pedal-card">
+        <div class="ck-label">CLUTCH</div>
+        <div class="ck-bar-h"><div class="ck-bar-fill ck-clutch-fill" id="ck-clutch-bar"></div></div>
+        <div class="ck-pedal-val" id="ck-clutch-val">—</div>
+      </div>
+      <div class="ck-pedal-card" style="flex:0 0 auto;padding:12px 28px">
+        <div class="ck-label">HANDBRAKE</div>
+        <div class="ck-hbrake-circle" id="ck-hbrake">OFF</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Telemetry ── -->
+  <div id="sub-telemetry" class="sub-view">
+    <div class="tel-row-label">SUSPENSION TRAVEL (mm)</div>
+    <div class="tel-grid-4">
+      <div class="tel-card"><div class="tel-label">FL</div><div class="tel-big-val" id="tel-susp-fl">—</div><div class="tel-bar-h"><div class="tel-bar-fill" id="tel-susp-bar-fl" style="background:var(--primary)"></div></div></div>
+      <div class="tel-card"><div class="tel-label">FR</div><div class="tel-big-val" id="tel-susp-fr">—</div><div class="tel-bar-h"><div class="tel-bar-fill" id="tel-susp-bar-fr" style="background:var(--primary)"></div></div></div>
+      <div class="tel-card"><div class="tel-label">RL</div><div class="tel-big-val" id="tel-susp-rl">—</div><div class="tel-bar-h"><div class="tel-bar-fill" id="tel-susp-bar-rl" style="background:var(--primary)"></div></div></div>
+      <div class="tel-card"><div class="tel-label">RR</div><div class="tel-big-val" id="tel-susp-rr">—</div><div class="tel-bar-h"><div class="tel-bar-fill" id="tel-susp-bar-rr" style="background:var(--primary)"></div></div></div>
+    </div>
+    <div class="tel-row-label">WHEEL RPM</div>
+    <div class="tel-grid-4">
+      <div class="tel-card"><div class="tel-label">FL</div><div class="tel-big-val" id="tel-wrpm-fl">—</div><div class="tel-bar-h"><div class="tel-bar-fill" id="tel-wrpm-bar-fl" style="background:var(--orange)"></div></div></div>
+      <div class="tel-card"><div class="tel-label">FR</div><div class="tel-big-val" id="tel-wrpm-fr">—</div><div class="tel-bar-h"><div class="tel-bar-fill" id="tel-wrpm-bar-fr" style="background:var(--orange)"></div></div></div>
+      <div class="tel-card"><div class="tel-label">RL</div><div class="tel-big-val" id="tel-wrpm-rl">—</div><div class="tel-bar-h"><div class="tel-bar-fill" id="tel-wrpm-bar-rl" style="background:var(--orange)"></div></div></div>
+      <div class="tel-card"><div class="tel-label">RR</div><div class="tel-big-val" id="tel-wrpm-rr">—</div><div class="tel-bar-h"><div class="tel-bar-fill" id="tel-wrpm-bar-rr" style="background:var(--orange)"></div></div></div>
+    </div>
+    <div class="tel-row-label">ENGINE</div>
+    <div class="tel-grid-2">
+      <div class="tel-card">
+        <div class="tel-label">POWER</div>
+        <div class="tel-bar-h"><div class="tel-bar-fill" id="tel-power-bar" style="background:var(--green)"></div></div>
+        <div class="tel-big-val"><span id="tel-power">—</span> <span class="tel-unit">kW</span></div>
+      </div>
+      <div class="tel-card">
+        <div class="tel-label">TORQUE</div>
+        <div class="tel-bar-h"><div class="tel-bar-fill" id="tel-torque-bar" style="background:var(--gold)"></div></div>
+        <div class="tel-big-val"><span id="tel-torque">—</span> <span class="tel-unit">Nm</span></div>
+      </div>
+    </div>
+    <div class="tel-row-label">TIRE SLIP RATIO</div>
+    <div class="tel-grid-4">
+      <div class="tel-card"><div class="tel-label">FL</div><div class="tel-big-val" id="tel-slipratio-fl">—</div><div class="tel-bar-h"><div class="tel-bar-fill" id="tel-slipratio-bar-fl"></div></div></div>
+      <div class="tel-card"><div class="tel-label">FR</div><div class="tel-big-val" id="tel-slipratio-fr">—</div><div class="tel-bar-h"><div class="tel-bar-fill" id="tel-slipratio-bar-fr"></div></div></div>
+      <div class="tel-card"><div class="tel-label">RL</div><div class="tel-big-val" id="tel-slipratio-rl">—</div><div class="tel-bar-h"><div class="tel-bar-fill" id="tel-slipratio-bar-rl"></div></div></div>
+      <div class="tel-card"><div class="tel-label">RR</div><div class="tel-big-val" id="tel-slipratio-rr">—</div><div class="tel-bar-h"><div class="tel-bar-fill" id="tel-slipratio-bar-rr"></div></div></div>
+    </div>
+    <div class="tel-car-info">
+      <div class="tel-ci-item"><div class="tel-ci-val" id="tel-car-pi">—</div><div class="tel-ci-lbl">CAR PI</div></div>
+      <div class="tel-ci-item"><div class="tel-ci-val" id="tel-car-cyl">—</div><div class="tel-ci-lbl">CYLINDERS</div></div>
+    </div>
+  </div>
+
+  <!-- ── Map ── -->
+  <div id="sub-map" class="sub-view">
+    <div class="map-overlay-bar">
+      <span>POS <span class="map-overlay-val" id="map-race-pos">—</span></span>
+      <span>DIST <span class="map-overlay-val" id="map-distance">—</span></span>
+      <span>LAP <span class="map-overlay-val" id="map-cur-lap">—:——.———</span></span>
+    </div>
+    <div id="track-canvas-wrap" style="flex:1;min-height:0;position:relative;width:100%;border-radius:4px;overflow:hidden;background:var(--bg)">
       <div id="track-map"></div>
     </div>
     <div class="track-legend">
@@ -708,110 +806,22 @@ body[data-view="map"]       #view-map-panel { display: flex; }
     </div>
   </div>
 
-  <!-- Lap history -->
-  <div class="card card-history">
-    <div class="history-header">
-      <div class="h-lap">#</div>
-      <div class="h-sess">SESSION</div>
-      <div>LAP TIME</div>
-      <div>MAX SPEED</div>
-      <div>FLAGS</div>
+  <!-- ── History ── -->
+  <div id="sub-history" class="sub-view">
+    <div class="card card-history" style="flex:1;min-height:0;border-radius:0;border-left:none;border-right:none;border-bottom:none">
+      <div class="history-header">
+        <div class="h-lap">#</div>
+        <div class="h-sess">SESSION</div>
+        <div>LAP TIME</div>
+        <div>MAX SPEED</div>
+        <div>FLAGS</div>
+      </div>
+      <div id="lap-rows"></div>
     </div>
-    <div id="lap-rows"></div>
   </div>
-</div>
 
-<!-- ── Cockpit view ─────────────────────────────────────────────────────────── -->
-<div id="view-cockpit" class="view-panel">
-  <div class="ck-steer-section">
-    <div class="ck-label">STEERING</div>
-    <div class="ck-steer-track">
-      <div class="ck-steer-center"></div>
-      <div class="ck-steer-bar" id="ck-steer-bar"></div>
-    </div>
-    <div class="ck-steer-val" id="ck-steer-val">—</div>
-  </div>
-  <div class="ck-shift-section">
-    <div class="ck-shift ck-shift-up" id="ck-shift-up">
-      <div class="ck-shift-arrow">▲</div>
-      <div class="ck-shift-text">UPSHIFT</div>
-    </div>
-    <div class="ck-shift ck-shift-dn" id="ck-shift-dn">
-      <div class="ck-shift-arrow">▼</div>
-      <div class="ck-shift-text">DOWNSHIFT</div>
-    </div>
-  </div>
-  <div class="ck-pedals-section">
-    <div class="ck-pedal-card">
-      <div class="ck-label">CLUTCH</div>
-      <div class="ck-bar-h"><div class="ck-bar-fill ck-clutch-fill" id="ck-clutch-bar"></div></div>
-      <div class="ck-pedal-val" id="ck-clutch-val">—</div>
-    </div>
-    <div class="ck-pedal-card" style="flex:0 0 auto;padding:12px 28px">
-      <div class="ck-label">HANDBRAKE</div>
-      <div class="ck-hbrake-circle" id="ck-hbrake">OFF</div>
-    </div>
-  </div>
-</div>
-
-<!-- ── Telemetry view ───────────────────────────────────────────────────────── -->
-<div id="view-telemetry" class="view-panel">
-  <div class="tel-row-label">SUSPENSION TRAVEL (mm)</div>
-  <div class="tel-grid-4">
-    <div class="tel-card"><div class="tel-label">FL</div><div class="tel-big-val" id="tel-susp-fl">—</div><div class="tel-bar-h"><div class="tel-bar-fill" id="tel-susp-bar-fl" style="background:var(--primary)"></div></div></div>
-    <div class="tel-card"><div class="tel-label">FR</div><div class="tel-big-val" id="tel-susp-fr">—</div><div class="tel-bar-h"><div class="tel-bar-fill" id="tel-susp-bar-fr" style="background:var(--primary)"></div></div></div>
-    <div class="tel-card"><div class="tel-label">RL</div><div class="tel-big-val" id="tel-susp-rl">—</div><div class="tel-bar-h"><div class="tel-bar-fill" id="tel-susp-bar-rl" style="background:var(--primary)"></div></div></div>
-    <div class="tel-card"><div class="tel-label">RR</div><div class="tel-big-val" id="tel-susp-rr">—</div><div class="tel-bar-h"><div class="tel-bar-fill" id="tel-susp-bar-rr" style="background:var(--primary)"></div></div></div>
-  </div>
-  <div class="tel-row-label">WHEEL RPM</div>
-  <div class="tel-grid-4">
-    <div class="tel-card"><div class="tel-label">FL</div><div class="tel-big-val" id="tel-wrpm-fl">—</div><div class="tel-bar-h"><div class="tel-bar-fill" id="tel-wrpm-bar-fl" style="background:var(--orange)"></div></div></div>
-    <div class="tel-card"><div class="tel-label">FR</div><div class="tel-big-val" id="tel-wrpm-fr">—</div><div class="tel-bar-h"><div class="tel-bar-fill" id="tel-wrpm-bar-fr" style="background:var(--orange)"></div></div></div>
-    <div class="tel-card"><div class="tel-label">RL</div><div class="tel-big-val" id="tel-wrpm-rl">—</div><div class="tel-bar-h"><div class="tel-bar-fill" id="tel-wrpm-bar-rl" style="background:var(--orange)"></div></div></div>
-    <div class="tel-card"><div class="tel-label">RR</div><div class="tel-big-val" id="tel-wrpm-rr">—</div><div class="tel-bar-h"><div class="tel-bar-fill" id="tel-wrpm-bar-rr" style="background:var(--orange)"></div></div></div>
-  </div>
-  <div class="tel-row-label">ENGINE</div>
-  <div class="tel-grid-2">
-    <div class="tel-card">
-      <div class="tel-label">POWER</div>
-      <div class="tel-bar-h"><div class="tel-bar-fill" id="tel-power-bar" style="background:var(--green)"></div></div>
-      <div class="tel-big-val"><span id="tel-power">—</span> <span class="tel-unit">kW</span></div>
-    </div>
-    <div class="tel-card">
-      <div class="tel-label">TORQUE</div>
-      <div class="tel-bar-h"><div class="tel-bar-fill" id="tel-torque-bar" style="background:var(--gold)"></div></div>
-      <div class="tel-big-val"><span id="tel-torque">—</span> <span class="tel-unit">Nm</span></div>
-    </div>
-  </div>
-  <div class="tel-row-label">TIRE SLIP RATIO</div>
-  <div class="tel-grid-4">
-    <div class="tel-card"><div class="tel-label">FL</div><div class="tel-big-val" id="tel-slipratio-fl">—</div><div class="tel-bar-h"><div class="tel-bar-fill" id="tel-slipratio-bar-fl"></div></div></div>
-    <div class="tel-card"><div class="tel-label">FR</div><div class="tel-big-val" id="tel-slipratio-fr">—</div><div class="tel-bar-h"><div class="tel-bar-fill" id="tel-slipratio-bar-fr"></div></div></div>
-    <div class="tel-card"><div class="tel-label">RL</div><div class="tel-big-val" id="tel-slipratio-rl">—</div><div class="tel-bar-h"><div class="tel-bar-fill" id="tel-slipratio-bar-rl"></div></div></div>
-    <div class="tel-card"><div class="tel-label">RR</div><div class="tel-big-val" id="tel-slipratio-rr">—</div><div class="tel-bar-h"><div class="tel-bar-fill" id="tel-slipratio-bar-rr"></div></div></div>
-  </div>
-  <div class="tel-car-info">
-    <div class="tel-ci-item"><div class="tel-ci-val" id="tel-car-pi">—</div><div class="tel-ci-lbl">CAR PI</div></div>
-    <div class="tel-ci-item"><div class="tel-ci-val" id="tel-car-cyl">—</div><div class="tel-ci-lbl">CYLINDERS</div></div>
-  </div>
-</div>
-
-<!-- ── Map view ──────────────────────────────────────────────────────────────── -->
-<div id="view-map-panel" class="view-panel">
-  <div class="map-overlay-bar">
-    <span>POS <span class="map-overlay-val" id="map-race-pos">—</span></span>
-    <span>DIST <span class="map-overlay-val" id="map-distance">—</span></span>
-    <span>LAP <span class="map-overlay-val" id="map-cur-lap">—:——.———</span></span>
-  </div>
-  <div id="view-map-full-wrap">
-    <div id="track-map-full"></div>
-  </div>
-  <div class="track-legend">
-    <span>slow</span>
-    <div class="track-legend-bar"></div>
-    <span>fast</span>
-  </div>
-</div>
+</div><!-- end #sub-panel -->
+</div><!-- end #dash -->
 
 <!-- Offline overlay -->
 <div id="offline-overlay">
@@ -873,7 +883,7 @@ let gTrail      = [];
 let bestLapSeen = Infinity;
 let shiftUp     = false;
 let shiftDn     = false;
-let currentView = localStorage.getItem('pitlane-view') || 'race';
+let currentSubView = localStorage.getItem('pitlane-sub') || 'cockpit';
 
 // ── MapGenie live map ─────────────────────────────────────────────────────────
 // Calibration from Creiv/FH6-Telemetry-web: maps Forza world coords to lat/lng
@@ -897,10 +907,6 @@ let trailPrevLap = [];
 let trailLastLap = -1;
 let trailRAF     = false;
 
-let gMapFull         = null;
-let gTrailCanvasFull = null;
-let gCarDivFull      = null;
-let trailRAFFull     = false;
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 function fmtTime(s) {
@@ -1092,15 +1098,15 @@ function initLeafletMap() {
 
   gMap = L.map(mapDiv, {
     center:          L.latLng(MAP_CAL.latOffset, MAP_CAL.lngOffset),
-    zoom:            14,
+    zoom:            13,
     minZoom:         10,
     maxZoom:         15,
-    zoomControl:     false,
+    zoomControl:     true,
     attributionControl: false,
-    dragging:        false,
-    scrollWheelZoom: false,
-    doubleClickZoom: false,
-    keyboard:        false,
+    dragging:        true,
+    scrollWheelZoom: true,
+    doubleClickZoom: true,
+    keyboard:        true,
   });
 
   L.tileLayer(
@@ -1218,141 +1224,21 @@ function mapUpdate(worldX, worldZ, spd, lapNum) {
     gCarDiv.style.display = 'block';
     _scheduleTrailDraw();
   }
-  if (gMapFull) {
-    gMapFull.panTo(latlng, { animate: false, noMoveStart: true });
-    gCarDivFull.style.display = 'block';
-    _scheduleTrailDrawFull();
-  }
 }
 
-// ── Full-panel map (Map view) ─────────────────────────────────────────────────
-function initLeafletMapFull() {
-  const mapDiv = document.getElementById('track-map-full');
-  if (!mapDiv || typeof L === 'undefined' || gMapFull) return;
-
-  gMapFull = L.map(mapDiv, {
-    center:          L.latLng(MAP_CAL.latOffset, MAP_CAL.lngOffset),
-    zoom:            13,
-    minZoom:         10,
-    maxZoom:         15,
-    zoomControl:     true,
-    attributionControl: false,
-    scrollWheelZoom: true,
-    dragging:        true,
+// ── Sub-view switching ────────────────────────────────────────────────────────
+function switchSubView(sub) {
+  currentSubView = sub;
+  localStorage.setItem('pitlane-sub', sub);
+  document.getElementById('sub-panel').dataset.sub = sub;
+  document.querySelectorAll('.sub-tab').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.sub === sub);
   });
-
-  L.tileLayer(
-    'https://tiles.mapgenie.io/games/forza-horizon-6/one/default-v2/{z}/{y}/{x}.jpg',
-    { minZoom: 10, maxZoom: 15, maxNativeZoom: 14, tileSize: 256, noWrap: true, opacity: 0.75 }
-  ).addTo(gMapFull);
-
-  gTrailCanvasFull = document.createElement('canvas');
-  gTrailCanvasFull.style.cssText = 'position:absolute;inset:0;pointer-events:none;z-index:450;';
-  mapDiv.appendChild(gTrailCanvasFull);
-
-  gCarDivFull = document.createElement('div');
-  gCarDivFull.style.cssText = [
-    'position:absolute;width:14px;height:14px;border-radius:50%;',
-    'background:#00d4ff;box-shadow:0 0 14px #00d4ff;',
-    'transform:translate(-50%,-50%);',
-    'z-index:500;display:none;pointer-events:none;',
-  ].join('');
-  mapDiv.appendChild(gCarDivFull);
-
-  gMapFull.on('resize', _syncTrailCanvasFull);
-  _syncTrailCanvasFull();
-  if (carLatLng) {
-    gMapFull.panTo(carLatLng, { animate: false });
-    gCarDivFull.style.display = 'block';
-    _drawTrailFull();
-  }
-}
-
-function _syncTrailCanvasFull() {
-  if (!gMapFull || !gTrailCanvasFull) return;
-  const el = gMapFull.getContainer();
-  gTrailCanvasFull.width        = el.offsetWidth;
-  gTrailCanvasFull.height       = el.offsetHeight;
-  gTrailCanvasFull.style.width  = el.offsetWidth  + 'px';
-  gTrailCanvasFull.style.height = el.offsetHeight + 'px';
-  _drawTrailFull();
-}
-
-function _drawTrailFull() {
-  if (!gMapFull || !gTrailCanvasFull) return;
-  const ctx = gTrailCanvasFull.getContext('2d');
-  const W = gTrailCanvasFull.width, H = gTrailCanvasFull.height;
-  ctx.clearRect(0, 0, W, H);
-
-  function toPx(pt) { return gMapFull.latLngToContainerPoint(L.latLng(pt.lat, pt.lng)); }
-
-  if (trailPrevLap.length > 1) {
-    ctx.beginPath();
-    ctx.strokeStyle = '#1e1e3a';
-    ctx.lineWidth   = 2;
-    ctx.lineCap     = 'round';
-    ctx.lineJoin    = 'round';
-    for (let i = 0; i < trailPrevLap.length; i++) {
-      const p = toPx(trailPrevLap[i]);
-      i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y);
-    }
-    ctx.stroke();
-  }
-
-  if (trailCurLap.length > 1) {
-    const maxSpd = Math.max(...trailCurLap.map(p => p.spd), 1);
-    const batches = Array.from({ length: TRAIL_COLORS }, () => []);
-    for (let i = 1; i < trailCurLap.length; i++) {
-      const b   = trailCurLap[i];
-      const bkt = Math.min(TRAIL_COLORS - 1, Math.floor((b.spd / maxSpd) * TRAIL_COLORS));
-      batches[bkt].push({ a: trailCurLap[i - 1], b });
-    }
-    ctx.lineWidth = 3;
-    ctx.lineCap   = 'round';
-    for (let c = 0; c < TRAIL_COLORS; c++) {
-      const segs = batches[c];
-      if (!segs.length) continue;
-      const t = (c + 0.5) / TRAIL_COLORS;
-      ctx.strokeStyle = `hsl(${Math.round(240 - t * 200)},90%,55%)`;
-      ctx.beginPath();
-      for (const { a, b } of segs) {
-        const pa = toPx(a), pb = toPx(b);
-        ctx.moveTo(pa.x, pa.y);
-        ctx.lineTo(pb.x, pb.y);
-      }
-      ctx.stroke();
-    }
-  }
-
-  if (carLatLng && gCarDivFull) {
-    const p = gMapFull.latLngToContainerPoint(carLatLng);
-    gCarDivFull.style.left = p.x + 'px';
-    gCarDivFull.style.top  = p.y + 'px';
-  }
-}
-
-function _scheduleTrailDrawFull() {
-  if (trailRAFFull) return;
-  trailRAFFull = true;
-  requestAnimationFrame(() => { trailRAFFull = false; _drawTrailFull(); });
-}
-
-// ── View switching ────────────────────────────────────────────────────────────
-function switchView(view) {
-  currentView = view;
-  localStorage.setItem('pitlane-view', view);
-  document.body.dataset.view = view;
-  document.querySelectorAll('.view-tab').forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.view === view);
-  });
-  if (view === 'race' && gMap) {
-    setTimeout(() => gMap.invalidateSize(), 50);
-  }
-  if (view === 'map') {
-    if (!gMapFull) {
-      setTimeout(() => { initLeafletMapFull(); }, 50);
+  if (sub === 'map') {
+    if (!gMap) {
+      setTimeout(initLeafletMap, 50);
     } else {
-      setTimeout(() => { gMapFull.invalidateSize(); _syncTrailCanvasFull(); }, 50);
+      setTimeout(() => { gMap.invalidateSize(); _syncTrailCanvas(); }, 50);
     }
   }
 }
@@ -1594,19 +1480,12 @@ async function pollLaps() {
 
 // ── Init ───────────────────────────────────────────────────────────────────────
 buildSpeedTicks();
-initLeafletMap();
 connectSSE();
 pollLaps();
 setInterval(pollLaps, LAPS_POLL);
 
-// Restore saved view (body already has data-view="race" from HTML; update if different)
-if (currentView !== 'race') {
-  switchView(currentView);
-} else {
-  document.querySelectorAll('.view-tab').forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.view === 'race');
-  });
-}
+// Restore saved sub-view
+switchSubView(currentSubView);
 </script>
 </body>
 </html>
