@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>🏁 PitLane</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>
 /* ── Reset & base ─────────────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -279,12 +281,13 @@ body {
   overflow: hidden;
   background: var(--bg);
 }
-#track-canvas {
+#track-map {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
 }
+.leaflet-container { background: var(--bg) !important; }
 .track-legend {
   display: flex; justify-content: space-between; align-items: center;
   font: 0.55rem var(--font-mono); color: var(--muted); margin-top: 3px;
@@ -349,6 +352,19 @@ body {
   0%,100% { transform: scale(1); opacity: 0.5; }
   50%      { transform: scale(1.3); opacity: 0.1; }
 }
+
+/* ── Shift indicators ─────────────────────────────────────────────────────── */
+.shift-ind {
+  font: 700 0.7rem var(--font-mono); letter-spacing: 2px;
+  padding: 2px 8px; border-radius: 3px;
+  opacity: 0; transition: opacity 0.1s;
+  border: 1px solid transparent;
+}
+.shift-ind.active { opacity: 1; }
+.shift-ind-up { color: var(--green); background: rgba(0,255,135,0.10); border-color: var(--green); }
+.shift-ind-dn { color: var(--red);   background: rgba(255,59,59,0.10);  border-color: var(--red); }
+#live-badge.paused { background: rgba(157,78,221,0.15); color: var(--purple); border-color: var(--purple); }
+#live-badge.paused::before { content: '⏸ '; }
 </style>
 </head>
 <body>
@@ -387,9 +403,11 @@ body {
 
   <!-- Gear -->
   <div class="card card-gear">
+    <div id="shift-up" class="shift-ind shift-ind-up">▲ UPSHIFT</div>
     <div class="card-label">GEAR</div>
     <div id="gear-value" class="neutral">N</div>
     <div id="car-class">—</div>
+    <div id="shift-down" class="shift-ind shift-ind-dn">▼ DOWNSHIFT</div>
   </div>
 
   <!-- Current lap -->
@@ -549,7 +567,7 @@ body {
   <div class="card card-map">
     <div class="card-label">TRACK MAP</div>
     <div id="track-canvas-wrap">
-      <canvas id="track-canvas"></canvas>
+      <div id="track-map"></div>
     </div>
     <div class="track-legend">
       <span>slow</span>
@@ -586,7 +604,14 @@ const G_SCALE     = 44;
 const G_CENTER    = 90;
 const MAX_TRAIL   = 60;
 const LAPS_POLL   = 4000;
-const DONUT_CIRC  = 2 * Math.PI * 38;   // ≈238.76 — circumference of donut ring
+const DONUT_CIRC  = 2 * Math.PI * 38;
+const HOLD_MS     = 5 * 60 * 1000;   // 5-min hold before offline overlay
+
+// Shift advice thresholds (fraction of max RPM, with hysteresis)
+const SHIFT_UP    = 0.82;
+const SHIFT_UP_H  = 0.78;
+const SHIFT_DN    = 0.42;
+const SHIFT_DN_H  = 0.46;
 
 // Speed gauge geometry
 const R = 90, CX = 110, CY = 110;
@@ -622,14 +647,30 @@ function smooth(key, raw) {
 // ── State ──────────────────────────────────────────────────────────────────────
 let gTrail      = [];
 let bestLapSeen = Infinity;
+let shiftUp     = false;
+let shiftDn     = false;
 
-// Track map state
-const TRACK_MAX_PTS = 8000;     // ~4.4 min at 30Hz
-let trackCurLap  = [];          // {x, z, spd}
-let trackPrevLap = [];
-let trackBounds  = null;        // {minX, maxX, minZ, maxZ} — only expands
-let trackLastLap = -1;
-let trackYaw     = 0;
+// ── MapGenie live map ─────────────────────────────────────────────────────────
+// Calibration from Creiv/FH6-Telemetry-web: maps Forza world coords to lat/lng
+const MAP_CAL = {
+  lngX:      3.19077586e-5,
+  lngZ:      3.6740848e-8,
+  lngOffset: -0.654036112,
+  latX:      -3.5278329e-8,
+  latZ:      3.19779214e-5,
+  latOffset:  0.711518572,
+};
+const TRAIL_MAX    = 8000;
+const TRAIL_COLORS = 24;   // colour buckets for batched canvas drawing
+
+let gMap         = null;
+let gTrailCanvas = null;
+let gCarDiv      = null;
+let carLatLng    = null;
+let trailCurLap  = [];
+let trailPrevLap = [];
+let trailLastLap = -1;
+let trailRAF     = false;
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 function fmtTime(s) {
@@ -688,6 +729,18 @@ function updateGear(gear) {
   const el = document.getElementById('gear-value');
   el.textContent = gear === 0 ? 'N' : gear === 10 ? 'R' : String(gear);
   el.className   = gear === 0 ? 'neutral' : '';
+}
+
+// ── Shift advice ───────────────────────────────────────────────────────────────
+function updateShift(rpm, maxRpm) {
+  if (!maxRpm) return;
+  const r = rpm / maxRpm;
+  if (!shiftUp && r > SHIFT_UP)   shiftUp = true;
+  if ( shiftUp && r < SHIFT_UP_H) shiftUp = false;
+  if (!shiftDn && r < SHIFT_DN)   shiftDn = true;
+  if ( shiftDn && r > SHIFT_DN_H) shiftDn = false;
+  document.getElementById('shift-up').classList.toggle('active', shiftUp);
+  document.getElementById('shift-down').classList.toggle('active', shiftDn);
 }
 
 // ── G-force ────────────────────────────────────────────────────────────────────
@@ -795,138 +848,144 @@ function updateTire(pos, tempF, slip, susNorm, slipAngleRad) {
   }
 }
 
-// ── Track Map ─────────────────────────────────────────────────────────────────
-function trackUpdate(px, pz, spd, lapNum, yaw) {
-  if (px === 0 && pz === 0) return;   // no position (menu / sled-only packet)
-
-  // Detect lap transition
-  if (trackLastLap >= 0 && lapNum > trackLastLap) {
-    trackPrevLap = trackCurLap.slice();
-    trackCurLap  = [];
-    // Keep trackBounds — the track doesn't move
-  }
-  trackLastLap = lapNum;
-  trackYaw     = yaw;
-
-  trackCurLap.push({ x: px, z: pz, spd });
-  if (trackCurLap.length > TRACK_MAX_PTS) trackCurLap.shift();
-
-  // Expand global bounds (never shrink — track shape discovered over time)
-  if (!trackBounds) {
-    trackBounds = { minX: px, maxX: px, minZ: pz, maxZ: pz };
-  } else {
-    if (px < trackBounds.minX) trackBounds.minX = px;
-    if (px > trackBounds.maxX) trackBounds.maxX = px;
-    if (pz < trackBounds.minZ) trackBounds.minZ = pz;
-    if (pz > trackBounds.maxZ) trackBounds.maxZ = pz;
-  }
-
-  drawTrackMap();
+// ── MapGenie live map ─────────────────────────────────────────────────────────
+function worldToLatLng(x, z) {
+  return L.latLng(
+    MAP_CAL.latX * x + MAP_CAL.latZ * z + MAP_CAL.latOffset,
+    MAP_CAL.lngX * x + MAP_CAL.lngZ * z + MAP_CAL.lngOffset,
+  );
 }
 
-function drawTrackMap() {
-  const canvas = document.getElementById('track-canvas');
-  if (!canvas) return;
-  const W = canvas.width, H = canvas.height;
-  if (!W || !H) return;
+function initLeafletMap() {
+  const mapDiv = document.getElementById('track-map');
+  if (!mapDiv || typeof L === 'undefined') return;
 
-  const ctx = canvas.getContext('2d');
-  ctx.fillStyle = '#07070f';
-  ctx.fillRect(0, 0, W, H);
+  gMap = L.map(mapDiv, {
+    center:          L.latLng(MAP_CAL.latOffset, MAP_CAL.lngOffset),
+    zoom:            14,
+    minZoom:         10,
+    maxZoom:         15,
+    zoomControl:     false,
+    attributionControl: false,
+    dragging:        false,
+    scrollWheelZoom: false,
+    doubleClickZoom: false,
+    keyboard:        false,
+  });
 
-  if (!trackBounds || trackCurLap.length < 2) {
-    ctx.fillStyle = '#1e1e3a';
-    ctx.font      = `${Math.round(W * 0.045)}px 'Courier New'`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('DRIVE TO MAP TRACK', W * 0.5, H * 0.5);
-    return;
-  }
+  L.tileLayer(
+    'https://tiles.mapgenie.io/games/forza-horizon-6/one/default-v2/{z}/{y}/{x}.jpg',
+    { minZoom: 10, maxZoom: 15, maxNativeZoom: 14, tileSize: 256, noWrap: true, opacity: 0.75 }
+  ).addTo(gMap);
 
-  const pad    = Math.round(W * 0.06);
-  const rangeX = trackBounds.maxX - trackBounds.minX || 1;
-  const rangeZ = trackBounds.maxZ - trackBounds.minZ || 1;
-  const scale  = Math.min((W - pad * 2) / rangeX, (H - pad * 2) / rangeZ);
-  const offX   = (W - rangeX * scale) / 2;
-  const offZ   = (H - rangeZ * scale) / 2;
+  // Canvas overlay — speed-coloured trail
+  gTrailCanvas = document.createElement('canvas');
+  gTrailCanvas.style.cssText = 'position:absolute;inset:0;pointer-events:none;z-index:450;';
+  mapDiv.appendChild(gTrailCanvas);
 
-  function toSX(x) { return offX + (x - trackBounds.minX) * scale; }
-  function toSY(z) { return offZ + (z - trackBounds.minZ) * scale; }
+  // Car dot
+  gCarDiv = document.createElement('div');
+  gCarDiv.style.cssText = [
+    'position:absolute;width:12px;height:12px;border-radius:50%;',
+    'background:#00d4ff;box-shadow:0 0 10px #00d4ff;',
+    'transform:translate(-50%,-50%);',
+    'z-index:500;display:none;pointer-events:none;',
+  ].join('');
+  mapDiv.appendChild(gCarDiv);
 
-  // ── Previous lap ghost (dim) ──
-  if (trackPrevLap.length > 1) {
+  gMap.on('resize', _syncTrailCanvas);
+  _syncTrailCanvas();
+}
+
+function _syncTrailCanvas() {
+  if (!gMap || !gTrailCanvas) return;
+  const el = gMap.getContainer();
+  gTrailCanvas.width        = el.offsetWidth;
+  gTrailCanvas.height       = el.offsetHeight;
+  gTrailCanvas.style.width  = el.offsetWidth  + 'px';
+  gTrailCanvas.style.height = el.offsetHeight + 'px';
+  _drawTrail();
+}
+
+function _drawTrail() {
+  if (!gMap || !gTrailCanvas) return;
+  const ctx = gTrailCanvas.getContext('2d');
+  const W = gTrailCanvas.width, H = gTrailCanvas.height;
+  ctx.clearRect(0, 0, W, H);
+
+  function toPx(pt) { return gMap.latLngToContainerPoint(L.latLng(pt.lat, pt.lng)); }
+
+  // Previous lap ghost
+  if (trailPrevLap.length > 1) {
     ctx.beginPath();
     ctx.strokeStyle = '#1e1e3a';
-    ctx.lineWidth   = Math.max(1.5, W * 0.006);
+    ctx.lineWidth   = 2;
     ctx.lineCap     = 'round';
     ctx.lineJoin    = 'round';
-    for (let i = 0; i < trackPrevLap.length; i++) {
-      const p = trackPrevLap[i];
-      i === 0 ? ctx.moveTo(toSX(p.x), toSY(p.z)) : ctx.lineTo(toSX(p.x), toSY(p.z));
+    for (let i = 0; i < trailPrevLap.length; i++) {
+      const p = toPx(trailPrevLap[i]);
+      i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y);
     }
     ctx.stroke();
   }
 
-  // ── Current lap (speed-colored segments) ──
-  if (trackCurLap.length > 1) {
-    const maxSpd  = Math.max(...trackCurLap.map(p => p.spd), 1);
-    const lw      = Math.max(2, W * 0.009);
-    ctx.lineWidth = lw;
+  // Current lap — batch segments by speed colour bucket (fast: 24 stroke() calls)
+  if (trailCurLap.length > 1) {
+    const maxSpd = Math.max(...trailCurLap.map(p => p.spd), 1);
+    const batches = Array.from({ length: TRAIL_COLORS }, () => []);
+    for (let i = 1; i < trailCurLap.length; i++) {
+      const b   = trailCurLap[i];
+      const bkt = Math.min(TRAIL_COLORS - 1, Math.floor((b.spd / maxSpd) * TRAIL_COLORS));
+      batches[bkt].push({ a: trailCurLap[i - 1], b });
+    }
+    ctx.lineWidth = 2.5;
     ctx.lineCap   = 'round';
-    for (let i = 1; i < trackCurLap.length; i++) {
-      const a = trackCurLap[i - 1], b = trackCurLap[i];
-      const t = b.spd / maxSpd;
-      ctx.beginPath();
+    for (let c = 0; c < TRAIL_COLORS; c++) {
+      const segs = batches[c];
+      if (!segs.length) continue;
+      const t = (c + 0.5) / TRAIL_COLORS;
       ctx.strokeStyle = `hsl(${Math.round(240 - t * 200)},90%,55%)`;
-      ctx.moveTo(toSX(a.x), toSY(a.z));
-      ctx.lineTo(toSX(b.x), toSY(b.z));
+      ctx.beginPath();
+      for (const { a, b } of segs) {
+        const pa = toPx(a), pb = toPx(b);
+        ctx.moveTo(pa.x, pa.y);
+        ctx.lineTo(pb.x, pb.y);
+      }
       ctx.stroke();
     }
   }
 
-  // ── Car marker with yaw direction ──
-  if (trackCurLap.length > 0) {
-    const last = trackCurLap[trackCurLap.length - 1];
-    const sx   = toSX(last.x);
-    const sy   = toSY(last.z);
-    const r    = Math.max(5, W * 0.018);
-
-    // Direction arrow (yaw: 0=+Z, π/2=+X in Forza)
-    const arrowLen = r * 2.4;
-    ctx.beginPath();
-    ctx.moveTo(sx, sy);
-    ctx.lineTo(sx + Math.sin(trackYaw) * arrowLen, sy + Math.cos(trackYaw) * arrowLen);
-    ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth   = 2;
-    ctx.lineCap     = 'round';
-    ctx.stroke();
-
-    // Glowing car dot
-    ctx.beginPath();
-    ctx.arc(sx, sy, r, 0, Math.PI * 2);
-    ctx.fillStyle   = '#00d4ff';
-    ctx.shadowColor = '#00d4ff';
-    ctx.shadowBlur  = r * 2.5;
-    ctx.fill();
-    ctx.shadowBlur  = 0;
+  // Update car dot position
+  if (carLatLng && gCarDiv) {
+    const p = gMap.latLngToContainerPoint(carLatLng);
+    gCarDiv.style.left = p.x + 'px';
+    gCarDiv.style.top  = p.y + 'px';
   }
 }
 
-// ── Canvas sizing via ResizeObserver ──────────────────────────────────────────
-function initTrackCanvas() {
-  const wrap   = document.getElementById('track-canvas-wrap');
-  const canvas = document.getElementById('track-canvas');
-  if (!wrap || !canvas) return;
+function _scheduleTrailDraw() {
+  if (trailRAF) return;
+  trailRAF = true;
+  requestAnimationFrame(() => { trailRAF = false; _drawTrail(); });
+}
 
-  const ro = new ResizeObserver(([entry]) => {
-    const dpr = window.devicePixelRatio || 1;
-    const { width, height } = entry.contentRect;
-    if (!width || !height) return;
-    canvas.width  = Math.round(width  * dpr);
-    canvas.height = Math.round(height * dpr);
-    drawTrackMap();
-  });
-  ro.observe(wrap);
+function mapUpdate(worldX, worldZ, spd, lapNum) {
+  if (!gMap || (worldX === 0 && worldZ === 0)) return;
+  const latlng = worldToLatLng(worldX, worldZ);
+
+  if (trailLastLap >= 0 && lapNum > trailLastLap) {
+    trailPrevLap = trailCurLap.slice();
+    trailCurLap  = [];
+  }
+  trailLastLap = lapNum;
+  carLatLng    = latlng;
+
+  trailCurLap.push({ lat: latlng.lat, lng: latlng.lng, spd });
+  if (trailCurLap.length > TRAIL_MAX) trailCurLap.shift();
+
+  gMap.panTo(latlng, { animate: false, noMoveStart: true });
+  gCarDiv.style.display = 'block';
+  _scheduleTrailDraw();
 }
 
 // ── Lap history ────────────────────────────────────────────────────────────────
@@ -963,12 +1022,13 @@ let offlineTimeout = null;
 const overlay = document.getElementById('offline-overlay');
 
 function applyTelemetry(d) {
-  if (!d.is_live) { setOffline(); return; }
+  if (!d.is_live) { setPaused(); return; }
+
+  // Live data received — clear any paused/offline state
+  if (offlineTimeout) { clearTimeout(offlineTimeout); offlineTimeout = null; }
+  overlay.classList.remove('visible');
 
   const isRacing = d.race_on == null || d.race_on === 1;
-
-  overlay.classList.remove('visible');
-  if (offlineTimeout) { clearTimeout(offlineTimeout); offlineTimeout = null; }
 
   const badge = document.getElementById('live-badge');
   badge.className   = isRacing ? 'live' : 'menu';
@@ -984,6 +1044,7 @@ function applyTelemetry(d) {
   updateSpeedGauge(smooth('speed', d.speed_kmh      ?? 0));
   updateRPM(smooth('rpm', d.engine_rpm ?? 0), d.engine_max_rpm ?? 8500);
   updateGear(d.gear ?? 0);
+  updateShift(d.engine_rpm ?? 0, d.engine_max_rpm ?? 0);
 
   // Lap times
   document.getElementById('cur-lap').textContent = fmtTime(d.current_lap_time);
@@ -1035,21 +1096,21 @@ function applyTelemetry(d) {
     d.tire_slip_angle_rr ?? 0,
   );
 
-  // Track map
-  trackUpdate(
-    d.pos_x ?? 0,
-    d.pos_z ?? 0,
-    d.speed_kmh ?? 0,
-    d.lap_number ?? 0,
-    d.yaw ?? 0,
-  );
+  // Live map
+  mapUpdate(d.pos_x ?? 0, d.pos_z ?? 0, d.speed_kmh ?? 0, d.lap_number ?? 0);
 }
 
-function setOffline() {
-  document.getElementById('live-badge').className   = '';
-  document.getElementById('live-badge').textContent = 'OFFLINE';
+function setPaused() {
+  const badge = document.getElementById('live-badge');
+  badge.className   = 'paused';
+  badge.textContent = 'PAUSED';
+  // After HOLD_MS with no data, show the offline overlay
   if (!offlineTimeout) {
-    offlineTimeout = setTimeout(() => overlay.classList.add('visible'), 3000);
+    offlineTimeout = setTimeout(() => {
+      badge.className   = '';
+      badge.textContent = 'OFFLINE';
+      overlay.classList.add('visible');
+    }, HOLD_MS);
   }
 }
 
@@ -1059,7 +1120,7 @@ function connectSSE() {
     try { applyTelemetry(JSON.parse(e.data)); } catch (_) {}
   };
   es.onerror = () => {
-    setOffline();
+    setPaused();
     es.close();
     setTimeout(connectSSE, 3000);
   };
@@ -1074,7 +1135,7 @@ async function pollLaps() {
 
 // ── Init ───────────────────────────────────────────────────────────────────────
 buildSpeedTicks();
-initTrackCanvas();
+initLeafletMap();
 connectSSE();
 pollLaps();
 setInterval(pollLaps, LAPS_POLL);
