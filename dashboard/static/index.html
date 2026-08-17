@@ -114,7 +114,7 @@ body {
 /* ── Combined Lap Times ───────────────────────────────────────────────────── */
 .card-laptimes {
   grid-area: laptimes; flex-direction: column;
-  align-items: stretch; padding: 12px 16px; gap: 8px;
+  align-items: stretch; padding: 8px 14px; gap: 6px;
 }
 .lp-hdr { display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
 .lp-hdr-text { font: 0.58rem var(--font-mono); color: var(--muted); letter-spacing: 2px; text-transform: uppercase; }
@@ -131,11 +131,11 @@ body {
   position: absolute; height: 100%; border-radius: 2px;
   left: 50%; width: 0; transition: left 0.3s, width 0.3s, background 0.3s;
 }
-.lp-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 20px; flex: 1; }
+.lp-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 16px; flex: 1; }
 .lp-cell { display: flex; flex-direction: column; gap: 3px; }
 .lp-lbl { font: 0.55rem var(--font-mono); color: var(--muted); letter-spacing: 2px; }
-.lp-val { font: 700 1.5rem/1 var(--font-mono); color: var(--text); }
-.lp-val.lp-current { font-size: 1.9rem; }
+.lp-val { font: 700 1.1rem/1 var(--font-mono); color: var(--text); }
+.lp-val.lp-current { font-size: 1.35rem; }
 .lp-val.lp-best { color: var(--green); }
 .lp-val.new-best { color: var(--gold); text-shadow: 0 0 16px rgba(255,215,0,0.4); }
 
@@ -254,19 +254,19 @@ body {
 /* Tire grip */
 .ck-tires { flex: 1; min-width: 0; }
 .grip-layout { display: flex; gap: 6px; align-items: center; justify-content: center; flex: 1; }
-.grip-col { display: flex; flex-direction: column; gap: 12px; flex: 0 0 auto; }
+.grip-col { display: flex; flex-direction: column; gap: 8px; flex: 0 0 auto; }
 .grip-tire { display: flex; flex-direction: column; align-items: center; gap: 4px; }
 .grip-lbl { font: 700 0.6rem var(--font-mono); color: var(--muted); letter-spacing: 1px; }
 .grip-row-l, .grip-row-r { display: flex; align-items: center; gap: 5px; }
 .grip-oval {
-  width: 54px; height: 74px; border-radius: 30%;
+  width: 40px; height: 56px; border-radius: 30%;
   border: 2px solid var(--border); background: rgba(255,255,255,0.02);
   display: flex; align-items: center; justify-content: center;
   transition: border-color 0.2s, background 0.2s;
 }
-.grip-val { font: 700 1.1rem/1 var(--font-mono); color: var(--muted); transition: color 0.2s; }
+.grip-val { font: 700 0.85rem/1 var(--font-mono); color: var(--muted); transition: color 0.2s; }
 .grip-susp-wrap {
-  width: 5px; height: 56px; background: var(--surface2); border-radius: 3px;
+  width: 5px; height: 44px; background: var(--surface2); border-radius: 3px;
   overflow: hidden; display: flex; align-items: flex-end;
 }
 .grip-susp-bar {
@@ -276,7 +276,7 @@ body {
 .grip-temp { font: 0.58rem var(--font-mono); color: var(--muted); }
 .grip-car-center { display: flex; align-items: center; justify-content: center; padding: 0 8px; }
 .grip-car-body {
-  width: 48px; height: 96px;
+  width: 36px; height: 72px;
   border-radius: 35% 35% 20% 20% / 20% 20% 12% 12%;
   background: var(--surface2); border: 1px solid var(--border);
 }

@@ -251,7 +251,7 @@ td { padding: 7px 10px; vertical-align: middle; white-space: nowrap; }
   </nav>
   <div id="header-right">
     <span id="session-count"></span>
-    <a href="http://localhost:3000" target="_blank"
+    <a id="grafana-link" href="#" target="_blank"
        style="font-size:0.7rem;color:var(--muted);text-decoration:none;padding:4px 10px;border:1px solid var(--border);border-radius:3px;">Grafana ↗</a>
   </div>
 </div>
@@ -1465,6 +1465,7 @@ function drawAnalysisCharts() {
 // Boot
 // ══════════════════════════════════════════════════════════════════════════════
 document.getElementById('filter-input').addEventListener('input', renderSessionList);
+document.getElementById('grafana-link').href = `http://${window.location.hostname}:3000`;
 
 async function init() {
   await loadCarNames();
