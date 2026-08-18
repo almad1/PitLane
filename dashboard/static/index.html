@@ -70,7 +70,7 @@ body {
 #dash-grid {
   display: grid;
   grid-template-columns: 380px 420px 240px 1fr;
-  grid-template-areas: "tacho  laptimes  inputs  .";
+  grid-template-areas: "tacho  laptimes  inputs  tyres";
   gap: 8px; padding: 8px 8px 0;
 }
 
@@ -143,6 +143,11 @@ body {
 .card-inputs {
   grid-area: inputs; flex-direction: row;
   gap: 10px; padding: 10px 14px; align-items: stretch; justify-content: flex-start;
+}
+.card-tyre-grip {
+  grid-area: tyres; flex-direction: column;
+  align-items: stretch; justify-content: flex-start;
+  padding: 10px 12px; gap: 8px;
 }
 .input-group { display: flex; flex-direction: column; gap: 6px; width: 100%; }
 .input-row { display: flex; align-items: center; gap: 8px; }
@@ -433,6 +438,54 @@ body {
     </div>
   </div>
 
+  <!-- Tyre Grip -->
+  <div class="card card-tyre-grip">
+    <div class="ck-section-hdr">
+      <span class="ck-hdr-dash">—</span>
+      TYRE GRIP · SLIP / TEMP / SPRING
+    </div>
+    <div class="grip-layout">
+      <div class="grip-col">
+        <div class="grip-tire">
+          <div class="grip-lbl">FL</div>
+          <div class="grip-row-l">
+            <div class="grip-oval" id="grip-oval-fl"><div class="grip-val" id="grip-val-fl">—</div></div>
+            <div class="grip-susp-wrap"><div class="grip-susp-bar" id="grip-susp-fl"></div></div>
+          </div>
+          <div class="grip-temp" id="grip-temp-fl">—°</div>
+        </div>
+        <div class="grip-tire">
+          <div class="grip-lbl">RL</div>
+          <div class="grip-row-l">
+            <div class="grip-oval" id="grip-oval-rl"><div class="grip-val" id="grip-val-rl">—</div></div>
+            <div class="grip-susp-wrap"><div class="grip-susp-bar" id="grip-susp-rl"></div></div>
+          </div>
+          <div class="grip-temp" id="grip-temp-rl">—°</div>
+        </div>
+      </div>
+      <div class="grip-car-center"><div class="grip-car-body"></div></div>
+      <div class="grip-col">
+        <div class="grip-tire">
+          <div class="grip-lbl">FR</div>
+          <div class="grip-row-r">
+            <div class="grip-susp-wrap"><div class="grip-susp-bar" id="grip-susp-fr"></div></div>
+            <div class="grip-oval" id="grip-oval-fr"><div class="grip-val" id="grip-val-fr">—</div></div>
+          </div>
+          <div class="grip-temp" id="grip-temp-fr">—°</div>
+        </div>
+        <div class="grip-tire">
+          <div class="grip-lbl">RR</div>
+          <div class="grip-row-r">
+            <div class="grip-susp-wrap"><div class="grip-susp-bar" id="grip-susp-rr"></div></div>
+            <div class="grip-oval" id="grip-oval-rr"><div class="grip-val" id="grip-val-rr">—</div></div>
+          </div>
+          <div class="grip-temp" id="grip-temp-rr">—°</div>
+        </div>
+      </div>
+    </div>
+    <div class="grip-handling" id="grip-handling">NEUTRAL</div>
+  </div>
+
 </div><!-- end #dash-grid -->
 
 <!-- Sub-navigation -->
@@ -448,8 +501,6 @@ body {
 
   <!-- ── Cockpit ── -->
   <div id="sub-cockpit" class="sub-view">
-    <div class="ck-top-row">
-
       <!-- Friction Circle -->
       <div class="ck-section ck-friction">
         <div class="ck-section-hdr">
@@ -478,69 +529,6 @@ body {
           &nbsp; Total <span id="g-total-val" style="color:var(--text);font-weight:700">0.00</span> g
         </div>
       </div>
-
-      <!-- Tire Grip -->
-      <div class="ck-section ck-tires">
-        <div class="ck-section-hdr">
-          <span class="ck-hdr-dash">—</span>
-          TYRE GRIP · SLIP / TEMP / SPRING
-        </div>
-        <div class="grip-layout">
-          <!-- Left column: FL (top) RL (bottom) -->
-          <div class="grip-col">
-            <div class="grip-tire">
-              <div class="grip-lbl">FL</div>
-              <div class="grip-row-l">
-                <div class="grip-oval" id="grip-oval-fl">
-                  <div class="grip-val" id="grip-val-fl">—</div>
-                </div>
-                <div class="grip-susp-wrap"><div class="grip-susp-bar" id="grip-susp-fl"></div></div>
-              </div>
-              <div class="grip-temp" id="grip-temp-fl">—°</div>
-            </div>
-            <div class="grip-tire">
-              <div class="grip-lbl">RL</div>
-              <div class="grip-row-l">
-                <div class="grip-oval" id="grip-oval-rl">
-                  <div class="grip-val" id="grip-val-rl">—</div>
-                </div>
-                <div class="grip-susp-wrap"><div class="grip-susp-bar" id="grip-susp-rl"></div></div>
-              </div>
-              <div class="grip-temp" id="grip-temp-rl">—°</div>
-            </div>
-          </div>
-          <!-- Car body -->
-          <div class="grip-car-center">
-            <div class="grip-car-body"></div>
-          </div>
-          <!-- Right column: FR (top) RR (bottom) -->
-          <div class="grip-col">
-            <div class="grip-tire">
-              <div class="grip-lbl">FR</div>
-              <div class="grip-row-r">
-                <div class="grip-susp-wrap"><div class="grip-susp-bar" id="grip-susp-fr"></div></div>
-                <div class="grip-oval" id="grip-oval-fr">
-                  <div class="grip-val" id="grip-val-fr">—</div>
-                </div>
-              </div>
-              <div class="grip-temp" id="grip-temp-fr">—°</div>
-            </div>
-            <div class="grip-tire">
-              <div class="grip-lbl">RR</div>
-              <div class="grip-row-r">
-                <div class="grip-susp-wrap"><div class="grip-susp-bar" id="grip-susp-rr"></div></div>
-                <div class="grip-oval" id="grip-oval-rr">
-                  <div class="grip-val" id="grip-val-rr">—</div>
-                </div>
-              </div>
-              <div class="grip-temp" id="grip-temp-rr">—°</div>
-            </div>
-          </div>
-        </div>
-        <div class="grip-handling" id="grip-handling">NEUTRAL</div>
-      </div>
-
-    </div><!-- ck-top-row -->
 
     <!-- GPS Trace Track Map -->
     <div class="ck-section ck-gps-map">

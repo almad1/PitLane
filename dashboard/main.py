@@ -34,7 +34,7 @@ RELAY_FILE    = os.environ.get("RELAY_FILE", "/relay/latest.json")
 
 STALE_SECS = 5.0
 
-_VERSION_FILE = os.path.join(os.path.dirname(__file__), "..", "VERSION")
+_VERSION_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "VERSION")
 
 def _read_version() -> str:
     try:
