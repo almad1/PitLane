@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>PitLane — Analytics</title>
+<link rel="stylesheet" href="/vendor/uplot.min.css">
+<script src="/vendor/uplot.iife.min.js"></script>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -26,8 +28,6 @@
   --purple:    #8c3dc8;
   --font-mono: 'Courier New', Courier, monospace;
   --font-ui:   -apple-system, 'Segoe UI', Arial, sans-serif;
-  --cls-d:#8c8c8c; --cls-c:#d4ca00; --cls-b:#e87c00;
-  --cls-a:#d42020; --cls-s1:#8c3dc8; --cls-s2:#3c78c8; --cls-x:#28c828;
 }
 @media (prefers-color-scheme: light) {
   :root:not([data-theme="dark"]) {
@@ -44,7 +44,6 @@
   --green:#28cc88; --red:#e03838; --cyan:#00c8f0;
 }
 
-/* ── Base ─────────────────────────────────────────────────────────────────── */
 html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(--text);
   font-family: var(--font-ui); font-size: 14px; }
 
@@ -62,7 +61,6 @@ nav a.active { color: var(--accent); background: rgba(232,160,32,0.1); }
 #header-right { margin-left: auto; display: flex; gap: 10px; align-items: center; }
 #session-count { font-size: 0.7rem; color: var(--muted); }
 
-/* ── Layout ───────────────────────────────────────────────────────────────── */
 #layout { display: grid; grid-template-columns: 320px 1fr; height: calc(100vh - 48px); overflow: hidden; }
 
 /* ── Sidebar ──────────────────────────────────────────────────────────────── */
@@ -84,7 +82,6 @@ nav a.active { color: var(--accent); background: rgba(232,160,32,0.1); }
 #session-list::-webkit-scrollbar { width: 4px; }
 #session-list::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
 
-/* ── Session card ─────────────────────────────────────────────────────────── */
 .session-card { display: flex; gap: 0; cursor: pointer; border-bottom: 1px solid var(--border);
   transition: background 0.1s; }
 .session-card:hover  { background: var(--card-hover); }
@@ -105,8 +102,10 @@ nav a.active { color: var(--accent); background: rgba(232,160,32,0.1); }
 .card-stats .val { color: var(--text); font-weight: 500; }
 .sparkline-wrap { height: 28px; }
 .sparkline-wrap svg { display: block; }
+.grp-tag { font-size: 0.55rem; letter-spacing: 1px; color: var(--purple);
+  border: 1px solid var(--purple); border-radius: 2px; padding: 0 4px; flex-shrink: 0; }
 
-/* ── Detail panel ─────────────────────────────────────────────────────────── */
+/* ── Detail ───────────────────────────────────────────────────────────────── */
 #detail { display: flex; flex-direction: column; overflow: hidden; }
 #empty-state { flex: 1; display: flex; flex-direction: column; align-items: center;
   justify-content: center; gap: 12px; color: var(--muted); }
@@ -114,28 +113,29 @@ nav a.active { color: var(--accent); background: rgba(232,160,32,0.1); }
 #empty-state p { font-size: 0.85rem; letter-spacing: 1px; }
 #session-view { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
 
-/* ── Session header ───────────────────────────────────────────────────────── */
-#session-header { padding: 12px 20px 10px; border-bottom: 1px solid var(--border);
+#session-header { padding: 10px 20px 9px; border-bottom: 1px solid var(--border);
   flex-shrink: 0; display: flex; align-items: center; gap: 14px; }
 #session-header .cls-badge-lg { font-size: 0.9rem; font-weight: 800; letter-spacing: 2px;
   padding: 4px 10px; border-radius: 4px; background: rgba(255,255,255,0.06); }
 #hdr-info { flex: 1; min-width: 0; }
 #hdr-car  { font-size: 0.95rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #hdr-meta { font-size: 0.7rem; color: var(--text-dim); margin-top: 2px; }
+.hdr-btn { font-size: 0.62rem; letter-spacing: 1px; text-transform: uppercase;
+  padding: 4px 9px; border-radius: 3px; cursor: pointer; background: none;
+  border: 1px solid var(--border2); color: var(--text-dim); transition: all 0.15s; flex-shrink: 0; }
+.hdr-btn:hover { color: var(--accent); border-color: var(--accent); }
 
-/* ── Stats grid ───────────────────────────────────────────────────────────── */
 #stats-grid { display: grid; grid-template-columns: repeat(6, 1fr);
   border-bottom: 1px solid var(--border); flex-shrink: 0; }
-.stat-cell { padding: 10px 14px; border-right: 1px solid var(--border); }
+.stat-cell { padding: 8px 14px; border-right: 1px solid var(--border); }
 .stat-cell:last-child { border-right: none; }
-.stat-label { font-size: 0.58rem; letter-spacing: 2px; text-transform: uppercase;
-  color: var(--muted); margin-bottom: 4px; }
-.stat-value { font: 700 1.2rem/1 var(--font-mono); color: var(--text); font-variant-numeric: tabular-nums; }
+.stat-label { font-size: 0.56rem; letter-spacing: 2px; text-transform: uppercase;
+  color: var(--muted); margin-bottom: 3px; }
+.stat-value { font: 700 1.1rem/1 var(--font-mono); color: var(--text); font-variant-numeric: tabular-nums; }
 .stat-value.gold  { color: var(--gold); }
 .stat-value.green { color: var(--green); }
-.stat-sub { font-size: 0.62rem; color: var(--text-dim); margin-top: 3px; }
+.stat-sub { font-size: 0.6rem; color: var(--text-dim); margin-top: 3px; }
 
-/* ── Tab bar ──────────────────────────────────────────────────────────────── */
 #tab-bar { display: flex; border-bottom: 1px solid var(--border); padding: 0 16px;
   flex-shrink: 0; gap: 0; }
 .tab-btn { font-size: 0.68rem; letter-spacing: 1.5px; text-transform: uppercase;
@@ -144,12 +144,10 @@ nav a.active { color: var(--accent); background: rgba(232,160,32,0.1); }
   transition: color 0.15s, border-color 0.15s; }
 .tab-btn:hover { color: var(--text); }
 .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
-
-/* ── Tab panels ───────────────────────────────────────────────────────────── */
 .tab-panel { display: none; flex: 1; overflow: hidden; flex-direction: column; min-height: 0; }
 .tab-panel.active { display: flex; }
 
-/* ── Lap table (Overview tab) ─────────────────────────────────────────────── */
+/* ── Lap table ────────────────────────────────────────────────────────────── */
 #lap-table-wrap { flex: 1; overflow-y: auto; overflow-x: auto; }
 #lap-table-wrap::-webkit-scrollbar { width: 4px; height: 4px; }
 #lap-table-wrap::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
@@ -162,7 +160,7 @@ tbody tr { border-bottom: 1px solid rgba(26,26,56,0.6); transition: background 0
 tbody tr:hover { background: var(--card-hover); }
 tbody tr.best-row  { background: rgba(240,200,64,0.05); }
 tbody tr.dirty-row { opacity: 0.65; }
-td { padding: 7px 10px; vertical-align: middle; white-space: nowrap; }
+td { padding: 6px 10px; vertical-align: middle; white-space: nowrap; }
 .td-lap  { color: var(--muted); width: 36px; }
 .td-time { font-family: var(--font-mono); font-weight: 600; }
 .td-time.best { color: var(--gold); }
@@ -184,12 +182,71 @@ td { padding: 7px 10px; vertical-align: middle; white-space: nowrap; }
 .flag-est  { background: rgba(232,160,32,0.15); color: var(--accent); }
 .flag-rwd  { background: rgba(224,56,56,0.15);  color: var(--red); }
 .no-laps { padding: 40px; text-align: center; color: var(--muted); font-size: 0.85rem; }
+.pick-btn { width: 22px; height: 22px; border-radius: 3px; cursor: pointer;
+  background: none; border: 1px solid var(--border2); color: var(--text-dim);
+  font-size: 0.8rem; line-height: 1; transition: all 0.15s; }
+.pick-btn:hover { border-color: var(--accent); color: var(--accent); }
+.pick-btn.picked { color: var(--bg); border-color: transparent; font-weight: 800; }
 
-/* ── Track Map tab ────────────────────────────────────────────────────────── */
+/* ── Analysis panel ───────────────────────────────────────────────────────── */
+#tab-analysis { overflow-y: auto; }
+#tab-analysis::-webkit-scrollbar { width: 5px; }
+#tab-analysis::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+.panel { border-bottom: 1px solid var(--border); }
+.panel-hdr { display: flex; align-items: center; gap: 10px; padding: 7px 16px;
+  font-size: 0.6rem; letter-spacing: 2px; text-transform: uppercase; color: var(--muted);
+  background: var(--surface); border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+.panel-hdr .spacer { margin-left: auto; }
+
+/* Pick tray */
+#cmp-tray { display: flex; gap: 6px; align-items: center; padding: 8px 16px;
+  flex-wrap: wrap; min-height: 44px; }
+.tray-chip { display: flex; align-items: center; gap: 6px; padding: 3px 6px 3px 8px;
+  border-radius: 4px; border: 1px solid; font: 0.7rem var(--font-mono);
+  background: var(--card); cursor: pointer; }
+.tray-chip .letter { font-weight: 800; }
+.tray-chip .meta { color: var(--text-dim); font-size: 0.65rem; }
+.tray-chip .x { border: none; background: none; cursor: pointer; color: var(--muted);
+  font-size: 0.75rem; padding: 0 2px; }
+.tray-chip .x:hover { color: var(--red); }
+.tray-chip.ref { box-shadow: 0 0 0 1px currentColor inset; }
+.tray-empty { color: var(--muted); font-size: 0.72rem; letter-spacing: 1px; }
+.tray-warn { color: var(--accent); font-size: 0.68rem; }
+
+/* Analysis map */
+#amap-wrap { position: relative; height: 300px; background: var(--bg); }
+#amap { display: block; width: 100%; height: 100%; cursor: crosshair; }
+#amap-hint { position: absolute; left: 10px; bottom: 8px; font: 0.6rem var(--font-mono);
+  color: var(--muted); pointer-events: none; }
+select.mini, button.mini { background: var(--bg); border: 1px solid var(--border2);
+  color: var(--text); padding: 3px 8px; border-radius: 3px; font-size: 0.68rem;
+  cursor: pointer; font-family: var(--font-ui); }
+button.mini:hover { border-color: var(--accent); color: var(--accent); }
+
+/* Charts */
+#charts { padding: 8px 12px 14px; display: flex; flex-direction: column; gap: 10px; }
+#charts .uplot { width: 100% !important; }
+.u-title { font-size: 0.68rem !important; letter-spacing: 1px; color: var(--text-dim) !important; }
+.u-legend { font-size: 0.66rem !important; }
+.empty-hint { padding: 34px; text-align: center; color: var(--muted);
+  font-size: 0.76rem; letter-spacing: 1px; }
+
+/* Raw table */
+#raw-wrap { max-height: 320px; overflow: auto; }
+#raw-wrap::-webkit-scrollbar { width: 5px; height: 5px; }
+#raw-wrap::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+#raw-table { width: 100%; font: 0.68rem var(--font-mono); border-collapse: collapse; }
+#raw-table th { position: sticky; top: 0; background: var(--surface); text-align: right;
+  padding: 4px 10px; font-weight: 700; border-bottom: 1px solid var(--border2); }
+#raw-table th:first-child { text-align: left; }
+#raw-table td { padding: 2px 10px; text-align: right; border-bottom: 1px solid rgba(26,26,56,0.5); }
+#raw-table td:first-child { text-align: left; color: var(--text-dim); }
+#raw-table tr.grp td { background: var(--surface); color: var(--muted);
+  letter-spacing: 2px; font-size: 0.6rem; text-transform: uppercase; }
+
+/* Track map tab */
 #map-controls { display: flex; align-items: center; gap: 10px; padding: 8px 16px;
   border-bottom: 1px solid var(--border); flex-shrink: 0; flex-wrap: wrap; }
-#map-lap-select { background: var(--bg); border: 1px solid var(--border2);
-  color: var(--text); padding: 4px 8px; border-radius: 3px; font-size: 0.72rem; cursor: pointer; }
 .view-toggle { display: flex; border: 1px solid var(--border2); border-radius: 3px; overflow: hidden; }
 .view-toggle button { padding: 4px 10px; background: none; border: none;
   font-size: 0.68rem; letter-spacing: 1px; cursor: pointer; color: var(--text-dim);
@@ -211,33 +268,8 @@ td { padding: 7px 10px; vertical-align: middle; white-space: nowrap; }
   font-size: 0.68rem; color: var(--text-dim); flex-shrink: 0;
   display: flex; gap: 16px; flex-wrap: wrap; min-height: 28px; align-items: center; }
 
-/* ── Lap Compare tab ──────────────────────────────────────────────────────── */
-#compare-controls { padding: 10px 16px; border-bottom: 1px solid var(--border);
-  flex-shrink: 0; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
-#compare-lap-grid { display: flex; flex-wrap: wrap; gap: 4px; }
-.cmp-lap-btn { font-size: 0.68rem; font-family: var(--font-mono);
-  padding: 3px 9px; border-radius: 3px; cursor: pointer; background: none;
-  border: 1px solid var(--border2); color: var(--text-dim); transition: all 0.15s; }
-.cmp-lap-btn.sel { color: var(--bg); border-color: transparent; }
-.compare-run-btn { font-size: 0.68rem; letter-spacing: 1px; text-transform: uppercase;
-  padding: 5px 14px; border-radius: 3px; cursor: pointer;
-  background: var(--accent); color: #07070e; border: none; transition: opacity 0.15s; }
-.compare-run-btn:hover { opacity: 0.85; }
-#cmp-legend { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
-.cmp-leg { display: flex; align-items: center; gap: 5px; font-size: 0.7rem; color: var(--text-dim); }
-.cmp-leg-line { height: 2px; width: 20px; border-radius: 1px; }
-#compare-charts-wrap { flex: 1; overflow-y: auto; min-height: 0; }
-#compare-charts-wrap::-webkit-scrollbar { width: 4px; }
-#compare-charts-wrap::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
-.chart-canvas-row canvas { display: block; width: 100%; }
-#cmp-placeholder { flex: 1; display: flex; align-items: center; justify-content: center;
-  color: var(--muted); font-size: 0.8rem; letter-spacing: 1.5px; }
-#compare-charts-wrap:empty::before { content: "SELECT LAPS AND CLICK COMPARE";
-  display: block; padding: 48px; text-align: center; color: var(--muted);
-  font-size: 0.8rem; letter-spacing: 1.5px; }
-
-/* ── Loading/misc ─────────────────────────────────────────────────────────── */
 #loading { padding: 60px; text-align: center; color: var(--muted); font-size: 0.8rem; letter-spacing: 2px; }
+@media (prefers-reduced-motion: reduce) { * { transition-duration: 0.01ms !important; } }
 </style>
 </head>
 <body>
@@ -259,7 +291,6 @@ td { padding: 7px 10px; vertical-align: middle; white-space: nowrap; }
 
 <div id="layout">
 
-  <!-- ─── Sidebar ─────────────────────────────────────────────────────────── -->
   <aside id="sidebar">
     <div id="filter-bar">
       <input id="filter-input" type="text" placeholder="Filter by car, class, or date…" autocomplete="off">
@@ -268,7 +299,6 @@ td { padding: 7px 10px; vertical-align: middle; white-space: nowrap; }
     <div id="session-list"><div id="loading">LOADING SESSIONS…</div></div>
   </aside>
 
-  <!-- ─── Detail ───────────────────────────────────────────────────────────── -->
   <main id="detail">
     <div id="empty-state">
       <div class="empty-icon">🏁</div>
@@ -277,59 +307,88 @@ td { padding: 7px 10px; vertical-align: middle; white-space: nowrap; }
 
     <div id="session-view" style="display:none">
 
-      <!-- Session header -->
       <div id="session-header">
         <div class="cls-badge-lg" id="hdr-cls-badge"></div>
         <div id="hdr-info">
           <div id="hdr-car"></div>
           <div id="hdr-meta"></div>
         </div>
+        <button class="hdr-btn" onclick="renameSession()">Rename</button>
+        <button class="hdr-btn" onclick="groupSession()">Group</button>
       </div>
 
-      <!-- Stats grid (6 cells) -->
       <div id="stats-grid">
-        <div class="stat-cell">
-          <div class="stat-label">Best Lap</div>
-          <div class="stat-value gold" id="st-best">—</div>
-        </div>
-        <div class="stat-cell">
-          <div class="stat-label">Avg Lap</div>
-          <div class="stat-value" id="st-avg">—</div>
-          <div class="stat-sub" id="st-consistency"></div>
-        </div>
-        <div class="stat-cell">
-          <div class="stat-label">Top Speed</div>
-          <div class="stat-value" id="st-speed">—</div>
-        </div>
-        <div class="stat-cell">
-          <div class="stat-label">Max G</div>
-          <div class="stat-value" id="st-g">—</div>
-        </div>
-        <div class="stat-cell">
-          <div class="stat-label">Distance</div>
-          <div class="stat-value" id="st-dist">—</div>
-          <div class="stat-sub" id="st-dirty"></div>
-        </div>
-        <div class="stat-cell">
-          <div class="stat-label">Laps</div>
-          <div class="stat-value green" id="st-laps">—</div>
-        </div>
+        <div class="stat-cell"><div class="stat-label">Best Lap</div><div class="stat-value gold" id="st-best">—</div></div>
+        <div class="stat-cell"><div class="stat-label">Avg Lap</div><div class="stat-value" id="st-avg">—</div><div class="stat-sub" id="st-consistency"></div></div>
+        <div class="stat-cell"><div class="stat-label">Top Speed</div><div class="stat-value" id="st-speed">—</div></div>
+        <div class="stat-cell"><div class="stat-label">Max G</div><div class="stat-value" id="st-g">—</div></div>
+        <div class="stat-cell"><div class="stat-label">Distance</div><div class="stat-value" id="st-dist">—</div><div class="stat-sub" id="st-dirty"></div></div>
+        <div class="stat-cell"><div class="stat-label">Laps</div><div class="stat-value green" id="st-laps">—</div></div>
       </div>
 
-      <!-- Tab bar -->
       <div id="tab-bar">
-        <button class="tab-btn active" data-tab="overview"  onclick="switchTab('overview')">Overview</button>
-        <button class="tab-btn"        data-tab="trackmap"  onclick="switchTab('trackmap')">Track Map</button>
-        <button class="tab-btn"        data-tab="compare"   onclick="switchTab('compare')">Lap Compare</button>
-        <button class="tab-btn"        data-tab="analysis"  onclick="switchTab('analysis')">Analysis</button>
+        <button class="tab-btn active" data-tab="analysis" onclick="switchTab('analysis')">Analysis</button>
+        <button class="tab-btn"        data-tab="overview" onclick="switchTab('overview')">Laps</button>
+        <button class="tab-btn"        data-tab="trackmap" onclick="switchTab('trackmap')">Track Map</button>
       </div>
 
-      <!-- ── Overview tab ──────────────────────────────────────────────────── -->
-      <div id="tab-overview" class="tab-panel active">
+      <!-- ── Analysis ──────────────────────────────────────────────────────── -->
+      <div id="tab-analysis" class="tab-panel active">
+
+        <div class="panel">
+          <div class="panel-hdr">
+            Comparison tray — A is the reference
+            <span class="spacer"></span>
+            <span id="tray-warn" class="tray-warn"></span>
+            <label style="display:flex;align-items:center;gap:5px;cursor:pointer;text-transform:none;letter-spacing:0">
+              <input type="checkbox" id="raw-toggle" onchange="toggleRaw(this.checked)" style="accent-color:var(--accent);cursor:pointer">
+              Raw data
+            </label>
+            <button class="mini" onclick="clearPicks()">Clear</button>
+          </div>
+          <div id="cmp-tray"></div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-hdr">
+            Racing line
+            <span class="spacer"></span>
+            <select id="color-mode" class="mini" onchange="setColorMode(this.value)">
+              <option value="speed">Colour: speed</option>
+              <option value="slip">Colour: tyre slip</option>
+              <option value="lap">Colour: per lap</option>
+            </select>
+            <button class="mini" onclick="exportMapPng()">Save PNG</button>
+          </div>
+          <div id="amap-wrap">
+            <canvas id="amap"></canvas>
+            <div id="amap-hint"></div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-hdr">
+            Channels
+            <span style="text-transform:none;letter-spacing:0;color:var(--muted)">
+              drag to zoom · double-click to reset · click to pin
+            </span>
+          </div>
+          <div id="charts"><div class="empty-hint">Add laps from the Laps tab to compare.</div></div>
+        </div>
+
+        <div class="panel" id="raw-panel" style="display:none">
+          <div class="panel-hdr">Raw telemetry at cursor</div>
+          <div id="raw-wrap"><table id="raw-table"></table></div>
+        </div>
+      </div>
+
+      <!-- ── Laps ──────────────────────────────────────────────────────────── -->
+      <div id="tab-overview" class="tab-panel">
         <div id="lap-table-wrap">
           <table>
             <thead>
               <tr>
+                <th style="width:34px"></th>
                 <th class="td-lap">#</th>
                 <th>Lap Time</th>
                 <th class="td-delta">Delta to Best</th>
@@ -345,10 +404,10 @@ td { padding: 7px 10px; vertical-align: middle; white-space: nowrap; }
         </div>
       </div>
 
-      <!-- ── Track Map tab ─────────────────────────────────────────────────── -->
+      <!-- ── Track Map ─────────────────────────────────────────────────────── -->
       <div id="tab-trackmap" class="tab-panel">
         <div id="map-controls">
-          <select id="map-lap-select" onchange="onMapLapChange()">
+          <select id="map-lap-select" class="mini" onchange="onMapLapChange()">
             <option value="">All laps</option>
           </select>
           <div class="view-toggle">
@@ -369,45 +428,25 @@ td { padding: 7px 10px; vertical-align: middle; white-space: nowrap; }
         <div id="map-event-bar"></div>
       </div>
 
-      <!-- ── Lap Compare tab ───────────────────────────────────────────────── -->
-      <div id="tab-compare" class="tab-panel">
-        <div id="compare-controls">
-          <div id="compare-lap-grid"></div>
-          <button class="compare-run-btn" onclick="runCompare()">Compare</button>
-          <div id="cmp-legend"></div>
-        </div>
-        <div id="compare-charts-wrap"></div>
-      </div>
-
-      <!-- ── Analysis tab ─────────────────────────────────────────────────── -->
-      <div id="tab-analysis" class="tab-panel" style="display:flex;flex-direction:column;gap:12px;overflow-y:auto;padding:12px;">
-        <div id="analysis-controls" style="display:flex;align-items:center;gap:12px;flex-shrink:0">
-          <span style="font-size:0.7rem;color:var(--muted);letter-spacing:2px">RANGE</span>
-          <select id="analysis-minutes" style="background:var(--bg);border:1px solid var(--border2);color:var(--text);padding:4px 8px;border-radius:3px;font-size:0.75rem">
-            <option value="5" selected>Last 5 min</option>
-            <option value="10">Last 10 min</option>
-            <option value="30">Last 30 min</option>
-          </select>
-          <button onclick="loadAnalysis()" style="padding:4px 12px;background:rgba(232,160,32,0.15);border:1px solid var(--accent);color:var(--accent);border-radius:3px;font-size:0.72rem;cursor:pointer;letter-spacing:1px">LOAD</button>
-          <span id="analysis-status" style="font-size:0.7rem;color:var(--muted)"></span>
-          <label id="analysis-cursor-label" style="display:none;font:0.7rem var(--font-mono);color:var(--text-dim);margin-left:auto"></label>
-        </div>
-        <div id="analysis-chart-inputs"  style="position:relative"><canvas id="ac-inputs"  height="120" style="width:100%;display:block"></canvas></div>
-        <div id="analysis-chart-speed"   style="position:relative"><canvas id="ac-speed"   height="120" style="width:100%;display:block"></canvas></div>
-        <div id="analysis-chart-gforce"  style="position:relative"><canvas id="ac-gforce"  height="120" style="width:100%;display:block"></canvas></div>
-        <div id="analysis-cursor-bar"    style="position:fixed;top:0;width:1px;background:rgba(232,160,32,0.5);pointer-events:none;display:none;z-index:10"></div>
-      </div>
-
-    </div><!-- #session-view -->
+    </div>
   </main>
-
 </div>
 </div>
 
 <script>
-// ══════════════════════════════════════════════════════════════════════════════
-// Helpers
-// ══════════════════════════════════════════════════════════════════════════════
+/* ═══════════════════════════════════════════════════════════════════════════
+   PitLane analytics.
+
+   The comparison engine below (distance-aligned interpolation onto a reference
+   lap, the Δ-time chart, synchronised cursor/zoom/pin across stacked uPlot
+   charts, the chart→map marker linkage, and the A–F pick tray) is adapted from
+   LapScope — https://github.com/darcane/LapScope — MIT © 2026 Erdem Darcan.
+   See THIRD_PARTY.md. Data access is PitLane's own (InfluxDB, not SQLite).
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+const $ = (sel) => document.querySelector(sel);
+
 function fmtTime(s) {
   if (s == null || s <= 0) return '—:——.———';
   const m  = Math.floor(s / 60);
@@ -419,9 +458,7 @@ function fmtDelta(d) {
   if (d == null) return '';
   const sign = d >= 0 ? '+' : '−';
   const abs  = Math.abs(d);
-  const ss   = Math.floor(abs);
-  const ms   = Math.round((abs % 1) * 1000);
-  return `${sign}${ss}.${String(ms).padStart(3,'0')}`;
+  return `${sign}${Math.floor(abs)}.${String(Math.round((abs % 1) * 1000)).padStart(3,'0')}`;
 }
 function fmtDate(iso) {
   if (!iso) return '—';
@@ -435,99 +472,92 @@ function fmtDateShort(iso) {
 }
 function fmtDist(km) {
   if (!km || km < 0.01) return '—';
-  if (km < 1) return `${Math.round(km * 1000)} m`;
-  return `${km.toFixed(1)} km`;
+  return km < 1 ? `${Math.round(km * 1000)} m` : `${km.toFixed(1)} km`;
 }
-
 const CLASS_COLOR = {D:'#8c8c8c',C:'#d4ca00',B:'#e87c00',A:'#d42020',S1:'#8c3dc8',S2:'#3c78c8',X:'#28c828'};
-function classColor(cls) { return CLASS_COLOR[cls] || '#666688'; }
+const classColor = (c) => CLASS_COLOR[c] || '#666688';
+const cssVar = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 
-// Lap compare colors (per-lap)
-const CMP_COLORS = ['#e8a020','#00c8f0','#28cc88','#e03838','#8c3dc8'];
-
-// ══════════════════════════════════════════════════════════════════════════════
-// Car Name Database
-// ══════════════════════════════════════════════════════════════════════════════
-let carDB = {};   // ordinal_string → car name
-
+// ── Car names ─────────────────────────────────────────────────────────────────
+let carDB = {};
 async function loadCarNames() {
   try {
-    const res  = await fetch('/car_ordinals.json');
-    const data = await res.json();
-    // Invert: { "Car Name Year": "ordinal" } → { "ordinal": "Car Name Year" }
-    for (const [name, ord] of Object.entries(data)) {
-      carDB[String(ord)] = name;
-    }
-  } catch (e) {
-    console.warn('Car DB not available:', e.message);
-  }
+    const data = await (await fetch('/car_ordinals.json')).json();
+    for (const [name, ord] of Object.entries(data)) carDB[String(ord)] = name;
+  } catch (e) { console.warn('Car DB not available:', e.message); }
 }
-
 function getCarName(ordinal) {
   if (!ordinal) return 'Unknown Car';
-  const n = carDB[String(ordinal)];
-  return n || `Car #${ordinal}`;
+  return carDB[String(ordinal)] || `Car #${ordinal}`;
 }
 
-// ══════════════════════════════════════════════════════════════════════════════
-// Sparkline
-// ══════════════════════════════════════════════════════════════════════════════
+// ── Sparkline ─────────────────────────────────────────────────────────────────
 function sparkline(times, w=296, h=28) {
   const valid = (times || []).filter(t => t > 0);
   if (valid.length < 2) return '';
   const lo = Math.min(...valid), hi = Math.max(...valid);
   const range = hi - lo || 0.001;
   const pad = 2;
-  const pts = valid.map((t, i) => {
-    const x = pad + (i / (valid.length - 1)) * (w - pad*2);
-    const y = h - pad - ((t - lo) / range) * (h - pad*2);
-    return [x, y];
-  });
+  const pts = valid.map((t, i) => [
+    pad + (i / (valid.length - 1)) * (w - pad*2),
+    h - pad - ((t - lo) / range) * (h - pad*2),
+  ]);
   const line = pts.map(([x,y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
-  const area = `${pts[0][0]},${h} ${line} ${pts[pts.length-1][0]},${h}`;
-  const [lx, ly] = pts[pts.length-1];
+  const [lx, ly] = pts[pts.length - 1];
   return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">
-    <polygon points="${area}" fill="rgba(232,160,32,0.08)"/>
+    <polygon points="${pts[0][0]},${h} ${line} ${lx},${h}" fill="rgba(232,160,32,0.08)"/>
     <polyline points="${line}" fill="none" stroke="rgba(232,160,32,0.45)" stroke-width="1.5" stroke-linejoin="round"/>
     <circle cx="${lx.toFixed(1)}" cy="${ly.toFixed(1)}" r="2.5" fill="#e8a020"/>
   </svg>`;
 }
 
-// ══════════════════════════════════════════════════════════════════════════════
-// App State
-// ══════════════════════════════════════════════════════════════════════════════
-let allSessions   = [];
-let activeFilters = new Set();
-let activeSession = null;
-let trackData     = null;
-let mapLap        = null;   // null = all laps, or specific lap number
-let mapView       = '2d';
-let compareData   = [];
-let selectedLaps  = new Set();
-let _lapsList     = [];     // current session's laps (for compare picker)
-let _mapObserver  = null;
+// ── State ─────────────────────────────────────────────────────────────────────
+const PICK_COLORS = ['#22d3ee', '#f59e0b', '#a78bfa', '#34d399', '#f472b6', '#94a3b8'];
+const MAX_PICKS   = PICK_COLORS.length;
+
+const state = {
+  allSessions: [], sessionsById: {},
+  activeFilters: new Set(),
+  session: null, laps: [],
+  picks: [],           // {key, sessionId, lap, lapMeta, color, data}
+  charts: [], zoomRange: null,
+  colorMode: 'speed', showRaw: false,
+  groups: { groups: [], renames: {} },
+};
+
+// track map (Track Map tab)
+let trackData = null, mapLap = null, mapView = '2d', _mapObserver = null;
+
+const refPick    = () => (state.picks[0] && state.picks[0].data ? state.picks[0] : null);
+const pickLetter = (p) => String.fromCharCode(65 + state.picks.indexOf(p));
+const pickOf     = (key) => state.picks.find(p => p.key === key);
+const nextColor  = () => PICK_COLORS.find(c => !state.picks.some(p => p.color === c));
 
 // ══════════════════════════════════════════════════════════════════════════════
-// Session List
+// Session list
 // ══════════════════════════════════════════════════════════════════════════════
+function sessionLabel(s) {
+  return state.groups.renames[s.session_id] || getCarName(s.car_ordinal);
+}
+function groupOf(sid) {
+  return state.groups.groups.find(g => (g.session_ids || []).includes(sid));
+}
+
 function renderSessionList() {
-  const q    = document.getElementById('filter-input').value.trim().toLowerCase();
-  const list = document.getElementById('session-list');
+  const q    = $('#filter-input').value.trim().toLowerCase();
+  const list = $('#session-list');
 
-  const filtered = allSessions.filter(s => {
-    if (activeFilters.size > 0 && !activeFilters.has(s.car_class)) return false;
+  const filtered = state.allSessions.filter(s => {
+    if (state.activeFilters.size > 0 && !state.activeFilters.has(s.car_class)) return false;
     if (q) {
-      const carName = getCarName(s.car_ordinal).toLowerCase();
-      const ord     = (s.car_ordinal || '').toString();
-      if (!s.session_id.includes(q) && !ord.includes(q)
-          && !carName.includes(q) && !fmtDateShort(s.started).toLowerCase().includes(q))
-        return false;
+      const hay = [sessionLabel(s), s.session_id, s.car_ordinal || '', fmtDateShort(s.started)]
+        .join(' ').toLowerCase();
+      if (!hay.includes(q)) return false;
     }
     return true;
   });
 
-  document.getElementById('session-count').textContent =
-    `${filtered.length} session${filtered.length !== 1 ? 's' : ''}`;
+  $('#session-count').textContent = `${filtered.length} session${filtered.length !== 1 ? 's' : ''}`;
 
   if (!filtered.length) {
     list.innerHTML = '<div style="padding:30px;text-align:center;color:var(--muted);font-size:0.8rem">No sessions match</div>';
@@ -536,24 +566,22 @@ function renderSessionList() {
 
   list.innerHTML = filtered.map(s => {
     const color    = classColor(s.car_class);
-    const isActive = activeSession?.session_id === s.session_id;
-    const carName  = getCarName(s.car_ordinal);
-    const bestStr  = s.best_lap  ? fmtTime(s.best_lap) : '—';
-    const spdStr   = s.top_speed ? `${Math.round(s.top_speed)} km/h` : '—';
+    const isActive = state.session?.session_id === s.session_id;
+    const grp      = groupOf(s.session_id);
     return `
-    <div class="session-card${isActive ? ' active' : ''}"
-         data-sid="${s.session_id}" onclick="selectSession('${s.session_id}')">
+    <div class="session-card${isActive ? ' active' : ''}" onclick="selectSession('${s.session_id}')">
       <div class="card-rail" style="background:${color}"></div>
       <div class="card-body">
         <div class="card-top">
           <div class="cls-badge" style="color:${color}">${s.car_class || '?'}</div>
-          <div class="card-car" title="${carName}">${carName}</div>
+          <div class="card-car" title="${sessionLabel(s)}">${sessionLabel(s)}</div>
+          ${grp ? `<div class="grp-tag" title="Group">${grp.name}</div>` : ''}
           <div class="drive-badge">${s.drivetrain || '—'}</div>
         </div>
         <div class="card-date">${fmtDateShort(s.started)} · ${s.lap_count} lap${s.lap_count !== 1 ? 's' : ''}</div>
         <div class="card-stats">
-          <span>Best <span class="val">${bestStr}</span></span>
-          <span>Top <span class="val">${spdStr}</span></span>
+          <span>Best <span class="val">${s.best_lap ? fmtTime(s.best_lap) : '—'}</span></span>
+          <span>Top <span class="val">${s.top_speed ? Math.round(s.top_speed) + ' km/h' : '—'}</span></span>
         </div>
         <div class="sparkline-wrap">${sparkline(s.lap_times)}</div>
       </div>
@@ -562,224 +590,762 @@ function renderSessionList() {
 }
 
 function buildClassPills() {
-  const classes = [...new Set(allSessions.map(s => s.car_class).filter(Boolean))];
-  const order   = ['D','C','B','A','S1','S2','X'];
-  classes.sort((a,b) => order.indexOf(a) - order.indexOf(b));
-  document.getElementById('class-pills').innerHTML = classes.map(cls => {
+  const order = ['D','C','B','A','S1','S2','X'];
+  const classes = [...new Set(state.allSessions.map(s => s.car_class).filter(Boolean))]
+    .sort((a,b) => order.indexOf(a) - order.indexOf(b));
+  $('#class-pills').innerHTML = classes.map(cls => {
     const color = classColor(cls);
-    return `<button class="cls-pill" data-cls="${cls}"
-        style="color:${color};background:${color}18"
-        onclick="toggleClass('${cls}')">${cls}</button>`;
+    return `<button class="cls-pill" data-cls="${cls}" style="color:${color};background:${color}18"
+             onclick="toggleClass('${cls}')">${cls}</button>`;
   }).join('');
 }
 
 function toggleClass(cls) {
-  if (activeFilters.has(cls)) activeFilters.delete(cls);
-  else activeFilters.add(cls);
+  state.activeFilters.has(cls) ? state.activeFilters.delete(cls) : state.activeFilters.add(cls);
   document.querySelectorAll('.cls-pill').forEach(p =>
-    p.classList.toggle('active', activeFilters.has(p.dataset.cls)));
+    p.classList.toggle('active', state.activeFilters.has(p.dataset.cls)));
   renderSessionList();
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// Session Detail
+// Session detail
 // ══════════════════════════════════════════════════════════════════════════════
-
 async function selectSession(sid) {
-  const s = allSessions.find(x => x.session_id === sid);
+  const s = state.allSessions.find(x => x.session_id === sid);
   if (!s) return;
-  activeSession = s;
-  trackData     = null;
-  compareData   = [];
-  selectedLaps  = new Set();
-  _lapsList     = [];
+  state.session = s;
+  state.sessionsById[sid] = s;
+  trackData = null;
   renderSessionList();
 
-  document.getElementById('empty-state').style.display  = 'none';
-  const view = document.getElementById('session-view');
-  view.style.display = 'flex';
+  $('#empty-state').style.display = 'none';
+  $('#session-view').style.display = 'flex';
 
-  // Header
   const color = classColor(s.car_class);
-  const badge = document.getElementById('hdr-cls-badge');
-  badge.textContent   = s.car_class || '?';
-  badge.style.color   = color;
+  const badge = $('#hdr-cls-badge');
+  badge.textContent = s.car_class || '?';
+  badge.style.color = color;
   badge.style.borderLeft = `3px solid ${color}`;
-  document.getElementById('hdr-car').textContent =
-    getCarName(s.car_ordinal) + (s.drivetrain ? `  ·  ${s.drivetrain}` : '');
-  document.getElementById('hdr-meta').textContent =
-    `${fmtDate(s.started)}  —  ${fmtDate(s.ended)}  ·  ${s.session_id}`;
+  $('#hdr-car').textContent = sessionLabel(s) + (s.drivetrain ? `  ·  ${s.drivetrain}` : '');
+  $('#hdr-meta').textContent = `${fmtDate(s.started)}  —  ${fmtDate(s.ended)}  ·  ${s.session_id}`;
 
-  // Stats
-  document.getElementById('st-best').textContent  = s.best_lap  ? fmtTime(s.best_lap) : '—';
-  document.getElementById('st-avg').textContent   = s.avg_lap   ? fmtTime(s.avg_lap)  : '—';
-  document.getElementById('st-speed').textContent = s.top_speed ? `${Math.round(s.top_speed)} km/h` : '—';
-  document.getElementById('st-g').textContent     = s.max_g     ? `${s.max_g.toFixed(2)} G` : '—';
-  document.getElementById('st-dist').textContent  = fmtDist(s.total_distance_km);
-  document.getElementById('st-laps').textContent  = s.lap_count;
+  $('#st-best').textContent  = s.best_lap  ? fmtTime(s.best_lap) : '—';
+  $('#st-avg').textContent   = s.avg_lap   ? fmtTime(s.avg_lap)  : '—';
+  $('#st-speed').textContent = s.top_speed ? `${Math.round(s.top_speed)} km/h` : '—';
+  $('#st-g').textContent     = s.max_g     ? `${s.max_g.toFixed(2)} G` : '—';
+  $('#st-dist').textContent  = fmtDist(s.total_distance_km);
+  $('#st-laps').textContent  = s.lap_count;
+  $('#st-consistency').textContent = (s.best_lap && s.avg_lap)
+    ? `avg +${((s.avg_lap - s.best_lap) / s.best_lap * 100).toFixed(1)}% off best` : '';
 
-  if (s.best_lap && s.avg_lap) {
-    const gap = ((s.avg_lap - s.best_lap) / s.best_lap * 100).toFixed(1);
-    document.getElementById('st-consistency').textContent = `avg +${gap}% off best`;
-  } else {
-    document.getElementById('st-consistency').textContent = '';
-  }
+  $('#map-loading').style.display = 'flex';
+  $('#map-event-bar').innerHTML   = '';
 
-  // Reset tabs to overview
-  switchTab('overview');
-  document.getElementById('map-loading').style.display = 'flex';
-  document.getElementById('map-event-bar').innerHTML   = '';
-  document.getElementById('compare-charts-wrap').innerHTML = '';
-  document.getElementById('cmp-legend').innerHTML      = '';
-  document.getElementById('compare-lap-grid').innerHTML = '';
-
-  // Load laps
-  const tbody = document.getElementById('lap-tbody');
-  tbody.innerHTML = `<tr><td colspan="8" class="no-laps" style="color:var(--muted)">Loading…</td></tr>`;
-
+  const tbody = $('#lap-tbody');
+  tbody.innerHTML = `<tr><td colspan="9" class="no-laps">Loading…</td></tr>`;
   try {
-    const res  = await fetch(`/api/sessions/${sid}/laps`);
-    const laps = await res.json();
-    _lapsList = laps;
-    renderLapTable(laps, s.best_lap);
-    buildComparePicker(laps);
-
-    const dirtyCount = laps.filter(l => l.dirty === 'true').length;
-    document.getElementById('st-dirty').textContent =
-      dirtyCount > 0 ? `${dirtyCount} rewind${dirtyCount > 1 ? 's' : ''}` : 'clean';
+    state.laps = await (await fetch(`/api/sessions/${sid}/laps`)).json();
+    renderLapTable();
+    const dirty = state.laps.filter(l => l.dirty === 'true').length;
+    $('#st-dirty').textContent = dirty ? `${dirty} rewind${dirty > 1 ? 's' : ''}` : 'clean';
   } catch {
-    tbody.innerHTML = `<tr><td colspan="8" class="no-laps">Failed to load laps</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="9" class="no-laps">Failed to load laps</td></tr>`;
   }
 
-  // Start loading track data in background
+  // Auto-seed the tray with this session's best lap so the page is useful
+  // immediately, but never stomp on picks the user chose themselves.
+  if (!state.picks.length && state.laps.length) {
+    const best = state.laps.reduce((b, l) =>
+      (l.lap_time > 0 && (!b || l.lap_time < b.lap_time)) ? l : b, null);
+    if (best) await addPick(sid, best.lap_number, best);
+  }
+
   loadTrackData(sid);
 }
 
-// ══════════════════════════════════════════════════════════════════════════════
-// Lap Table (Overview)
-// ══════════════════════════════════════════════════════════════════════════════
-function renderLapTable(laps, bestLap) {
-  const tbody = document.getElementById('lap-tbody');
+function renderLapTable() {
+  const laps = state.laps;
+  const tbody = $('#lap-tbody');
   if (!laps.length) {
-    tbody.innerHTML = `<tr><td colspan="8" class="no-laps">No lap records</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="9" class="no-laps">No lap records</td></tr>`;
     return;
   }
-  const validTimes = laps.map(l => l.lap_time).filter(t => t && t > 0);
-  const best    = bestLap || (validTimes.length ? Math.min(...validTimes) : 0);
-  const worst   = validTimes.length ? Math.max(...validTimes) : best;
+  const valid = laps.map(l => l.lap_time).filter(t => t > 0);
+  const best  = state.session?.best_lap || (valid.length ? Math.min(...valid) : 0);
+  const worst = valid.length ? Math.max(...valid) : best;
   const maxDelta = worst - best || 1;
+  const sid = state.session.session_id;
 
   tbody.innerHTML = laps.map(l => {
     const isBest  = l.lap_time && Math.abs(l.lap_time - best) < 0.001;
     const isDirty = l.dirty === 'true';
-    const isEst   = l.estimated === 'true';
     const delta   = l.lap_time ? l.lap_time - best : null;
+    const key     = `${sid}:${l.lap_number}`;
+    const pick    = pickOf(key);
 
     let deltaCell;
     if (isBest) {
-      deltaCell = `<div class="delta-wrap">
-        <span class="delta-label best">BEST</span>
-        <div class="delta-bar-track"><div class="delta-bar-fill" style="width:4%;background:var(--gold)"></div></div>
-      </div>`;
+      deltaCell = `<div class="delta-wrap"><span class="delta-label best">BEST</span>
+        <div class="delta-bar-track"><div class="delta-bar-fill" style="width:4%;background:var(--gold)"></div></div></div>`;
     } else if (delta != null) {
       const pct = Math.min((delta / maxDelta) * 100, 100);
       const hue = Math.max(0, 120 - pct * 1.2);
-      deltaCell = `<div class="delta-wrap">
-        <span class="delta-label plus">${fmtDelta(delta)}</span>
-        <div class="delta-bar-track"><div class="delta-bar-fill" style="width:${pct.toFixed(1)}%;background:hsl(${hue},80%,52%)"></div></div>
-      </div>`;
+      deltaCell = `<div class="delta-wrap"><span class="delta-label plus">${fmtDelta(delta)}</span>
+        <div class="delta-bar-track"><div class="delta-bar-fill" style="width:${pct.toFixed(1)}%;background:hsl(${hue},80%,52%)"></div></div></div>`;
     } else {
       deltaCell = '<span style="color:var(--muted)">—</span>';
     }
 
     const maxG  = Math.max(l.max_g_lat || 0, l.max_g_lon || 0);
-    const gStr  = maxG > 0 ? `${maxG.toFixed(2)}G` : '—';
     const flags = [];
-    if (isBest)  flags.push('<span class="flag flag-best">BEST</span>');
-    if (isEst)   flags.push('<span class="flag flag-est">EST</span>');
-    if (isDirty) flags.push('<span class="flag flag-rwd">RWD</span>');
-    const rowCls = [isBest ? 'best-row' : '', isDirty ? 'dirty-row' : ''].filter(Boolean).join(' ');
+    if (isBest)                   flags.push('<span class="flag flag-best">BEST</span>');
+    if (l.estimated === 'true')   flags.push('<span class="flag flag-est">EST</span>');
+    if (isDirty)                  flags.push('<span class="flag flag-rwd">RWD</span>');
 
-    return `<tr class="${rowCls}">
+    const btnStyle = pick ? `style="background:${pick.color}"` : '';
+    return `<tr class="${[isBest?'best-row':'', isDirty?'dirty-row':''].filter(Boolean).join(' ')}">
+      <td><button class="pick-btn${pick ? ' picked' : ''}" ${btnStyle}
+            onclick="togglePickLap(${l.lap_number})"
+            title="${pick ? 'Remove from tray' : 'Add to comparison tray'}">${pick ? pickLetter(pick) : '+'}</button></td>
       <td class="td-lap">${l.lap_number ?? '—'}</td>
       <td class="td-time${isBest ? ' best' : ''}">${fmtTime(l.lap_time)}</td>
       <td class="td-delta">${deltaCell}</td>
       <td>${l.max_speed_kmh ? Math.round(l.max_speed_kmh) + ' km/h' : '—'}</td>
-      <td style="color:var(--text-dim)">${gStr}</td>
+      <td style="color:var(--text-dim)">${maxG > 0 ? maxG.toFixed(2) + 'G' : '—'}</td>
       <td><span class="input-chip chip-thr">${l.avg_throttle != null ? Math.round(l.avg_throttle) + '%' : '—'}</span></td>
-      <td><span class="input-chip chip-brk">${l.avg_brake    != null ? Math.round(l.avg_brake)    + '%' : '—'}</span></td>
+      <td><span class="input-chip chip-brk">${l.avg_brake != null ? Math.round(l.avg_brake) + '%' : '—'}</span></td>
       <td><div class="flags">${flags.join('')}</div></td>
     </tr>`;
   }).join('');
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// Track Map
+// Pick tray — picks carry their own session, so they survive session switches
+// ══════════════════════════════════════════════════════════════════════════════
+function togglePickLap(lapNum) {
+  const sid  = state.session.session_id;
+  const key  = `${sid}:${lapNum}`;
+  const pick = pickOf(key);
+  if (pick) removePick(pick);
+  else addPick(sid, lapNum, state.laps.find(l => l.lap_number === lapNum));
+}
+
+async function addPick(sessionId, lap, lapMeta) {
+  const key = `${sessionId}:${lap}`;
+  if (pickOf(key)) return;
+  if (state.picks.length >= MAX_PICKS) {
+    warnTray(`Maximum ${MAX_PICKS} laps — remove one first`);
+    return;
+  }
+  state.picks.push({ key, sessionId, lap, lapMeta, color: nextColor(), data: null });
+  renderTray(); renderLapTable();
+  await fetchPickData();
+}
+
+function removePick(pick) {
+  state.picks = state.picks.filter(p => p !== pick);
+  // colours are positional, so re-key them after a removal
+  state.picks.forEach((p, i) => { p.color = PICK_COLORS[i]; });
+  state.zoomRange = null;
+  renderTray(); renderLapTable(); redrawAll();
+}
+
+function promoteRef(pick) {
+  const i = state.picks.indexOf(pick);
+  if (i <= 0) return;
+  state.picks.splice(i, 1);
+  state.picks.unshift(pick);
+  state.picks.forEach((p, n) => { p.color = PICK_COLORS[n]; });
+  state.zoomRange = null;
+  renderTray(); renderLapTable(); redrawAll();
+}
+
+function clearPicks() {
+  state.picks = [];
+  state.zoomRange = null;
+  mapCursor.idx = mapCursor.pin = null;
+  renderTray(); renderLapTable(); redrawAll();
+}
+
+function warnTray(msg) {
+  const el = $('#tray-warn');
+  el.textContent = msg;
+  setTimeout(() => { if (el.textContent === msg) el.textContent = ''; }, 2600);
+}
+
+async function fetchPickData() {
+  const missing = state.picks.filter(p => !p.data || (state.showRaw && !p.raw));
+  if (missing.length) {
+    const qs = missing.map(p => p.key).join(',');
+    try {
+      const rows = await (await fetch(
+        `/api/analysis/laps?picks=${encodeURIComponent(qs)}&raw=${state.showRaw ? 1 : 0}`)).json();
+      for (const row of rows) {
+        const p = pickOf(row.key);
+        if (p) { p.data = row; p.raw = row.raw || null; }
+      }
+    } catch (e) { warnTray('Failed to load lap telemetry'); }
+  }
+  // A lap with no telemetry in Influx can never render; drop it rather than
+  // leaving a chip that silently does nothing.
+  const dead = state.picks.filter(p => !p.data);
+  if (dead.length) {
+    state.picks = state.picks.filter(p => p.data);
+    state.picks.forEach((p, i) => { p.color = PICK_COLORS[i]; });
+    warnTray(`${dead.length} lap(s) had no telemetry`);
+  }
+  renderTray(); renderLapTable(); redrawAll();
+}
+
+function renderTray() {
+  const el = $('#cmp-tray');
+  if (!state.picks.length) {
+    el.innerHTML = '<span class="tray-empty">No laps selected — open the Laps tab and press + on a lap.</span>';
+    return;
+  }
+  const ref = state.picks[0];
+  const crossSession = new Set(state.picks.map(p => p.sessionId)).size > 1;
+  el.innerHTML = state.picks.map(p => {
+    const sess  = state.sessionsById[p.sessionId];
+    const label = crossSession && sess ? `${sessionLabel(sess).slice(0,18)} L${p.lap}` : `Lap ${p.lap}`;
+    const t     = p.data ? fmtTime(p.data.lap_time) : '…';
+    const gap   = (p !== ref && p.data && ref.data)
+      ? `  ${fmtDelta(p.data.lap_time - ref.data.lap_time)}` : '';
+    return `<span class="tray-chip${p === ref ? ' ref' : ''}" style="border-color:${p.color};color:${p.color}"
+              onclick="promoteRef(pickOf('${p.key}'))" title="Click to make this the reference lap">
+      <span class="letter">${pickLetter(p)}</span>
+      <span style="color:var(--text)">${label}</span>
+      <span class="meta">${t}${gap}</span>
+      <button class="x" onclick="event.stopPropagation();removePick(pickOf('${p.key}'))" title="Remove">✕</button>
+    </span>`;
+  }).join('');
+}
+
+function toggleRaw(on) {
+  state.showRaw = on;
+  $('#raw-panel').style.display = on ? '' : 'none';
+  if (on) fetchPickData(); else redrawAll();
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Distance-aligned interpolation (adapted from LapScope's interp)
+// ══════════════════════════════════════════════════════════════════════════════
+function interp(xs, ys, xq) {
+  const out = new Array(xq.length);
+  let i = 0;
+  for (let k = 0; k < xq.length; k++) {
+    const x = xq[k];
+    while (i < xs.length - 2 && xs[i + 1] < x) i++;
+    if (x <= xs[0]) out[k] = ys[0];
+    else if (x >= xs[xs.length - 1]) out[k] = ys[ys.length - 1];
+    else {
+      const span = xs[i + 1] - xs[i];   // 0 on plateaued distance (parked frames):
+      out[k] = span > 0                 // 0/0 would punch a NaN hole in the chart
+        ? ys[i] + (ys[i + 1] - ys[i]) * ((x - xs[i]) / span)
+        : ys[i];
+    }
+  }
+  return out;
+}
+
+function lowerBound(xs, x) {
+  let lo = 0, hi = xs.length - 1;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (xs[mid] < x) lo = mid + 1; else hi = mid;
+  }
+  return lo;
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Charts (uPlot)
+// ══════════════════════════════════════════════════════════════════════════════
+let zoomSyncing = false;
+
+function syncZoom(u) {
+  const ref = refPick();
+  if (zoomSyncing || !ref) return;
+  const x = ref.data.dist;
+  const { min, max } = u.scales.x;
+  if (min == null || max == null || !x.length) return;
+  zoomSyncing = true;
+  for (const c of state.charts) if (c !== u) c.setScale('x', { min, max });
+  zoomSyncing = false;
+  const range = (min <= x[0] && max >= x[x.length - 1]) ? null : [min, max];
+  if (JSON.stringify(range) !== JSON.stringify(state.zoomRange)) {
+    state.zoomRange = range;
+    drawAnalysisMap();
+  }
+}
+
+function drawPinLine(u) {
+  const ref = refPick();
+  if (mapCursor.pin == null || !ref || !ref.data.dist.length) return;
+  const x  = ref.data.dist[Math.min(mapCursor.pin, ref.data.dist.length - 1)];
+  const cx = u.valToPos(x, 'x', true);
+  if (cx < u.bbox.left || cx > u.bbox.left + u.bbox.width) return;  // zoomed out of view
+  const ctx = u.ctx;
+  ctx.save();
+  ctx.strokeStyle = 'rgba(255,255,255,0.55)';
+  ctx.setLineDash([4, 4]);
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(cx, u.bbox.top);
+  ctx.lineTo(cx, u.bbox.top + u.bbox.height);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function makeChart(holder, title, xVals, seriesDefs, height = 150) {
+  const el = document.createElement('div');
+  holder.appendChild(el);
+  const axisStroke = cssVar('--text-dim') || '#7b8794';
+  const gridStroke = cssVar('--border')   || '#242e3b';
+  const AXIS = { stroke: axisStroke, grid: { stroke: gridStroke }, ticks: { stroke: gridStroke } };
+
+  const opts = {
+    title, width: el.clientWidth || holder.clientWidth || 700, height,
+    cursor: { sync: { key: 'pitlane' } },
+    hooks: {
+      setCursor: [(u) => setMapCursor(u.cursor.idx ?? null)],
+      setScale:  [(u, key) => { if (key === 'x') syncZoom(u); }],
+      draw:      [drawPinLine],
+      ready: [(u) => {
+        // A click pins; a drag is uPlot's zoom, not a click; and the second
+        // click of a double-click is skipped so dblclick can reset instead.
+        let downX = null;
+        u.over.addEventListener('mousedown', (e) => { downX = e.clientX; });
+        u.over.addEventListener('click', (e) => {
+          if (e.detail > 1) return;
+          if (downX != null && Math.abs(e.clientX - downX) > 3) return;
+          togglePin(u.cursor.idx ?? null);
+        });
+        u.over.addEventListener('dblclick', () => {
+          if (mapCursor.pin == null) return;
+          mapCursor.pin = null;
+          drawMapMarker();
+          for (const c of state.charts) c.redraw();
+        });
+      }],
+    },
+    scales: { x: { time: false } },
+    // x is DistanceTraveled progress — a per-route track-position parameter,
+    // ideal for aligning laps but wrong to label as literal metres.
+    axes: [{ ...AXIS, label: 'track position' }, { ...AXIS }],
+    series: [{ label: 'dist' }, ...seriesDefs.map(s => ({ width: 1.6, ...s }))],
+  };
+  state.charts.push(new uPlot(opts, [xVals, ...seriesDefs.map(s => s._vals)], el));
+}
+
+function destroyCharts() {
+  // An instance whose root was removed by innerHTML stays registered in uPlot's
+  // cursor-sync group and keeps its listeners; destroy explicitly.
+  for (const c of state.charts) c.destroy();
+  state.charts = [];
+}
+
+function drawCharts() {
+  destroyCharts();
+  const holder = $('#charts');
+  if (!holder) return;
+  holder.innerHTML = '';
+
+  const ref = refPick();
+  if (!ref) {
+    holder.innerHTML = '<div class="empty-hint">Add laps from the Laps tab to compare.</div>';
+    return;
+  }
+
+  const A      = ref.data;
+  const x      = A.dist;
+  const others = state.picks.slice(1).filter(p => p.data);
+  const multi  = others.length > 0;
+
+  // Interpolate every non-reference lap onto the reference's axis once; all
+  // charts then share a single x-array, so cursor idx maps 1:1 across them.
+  const cache = new Map();
+  for (const p of others) {
+    const c = {};
+    for (const name of ['speed','thr','brk','str','lap_time'])
+      c[name] = interp(p.data.dist, p.data.ch[name], x);
+    cache.set(p, c);
+  }
+
+  const onA = (n) => A.ch[n];
+
+  if (multi) {
+    const tA = onA('lap_time');
+    makeChart(holder, 'Δ time vs A  —  above 0 = behind A', x, others.map(p => ({
+      label: `Δ ${pickLetter(p)}`, stroke: p.color,
+      fill: others.length === 1 ? `${p.color}22` : undefined,
+      _vals: cache.get(p).lap_time.map((t, i) => +(t - tA[i]).toFixed(3)),
+    })), 170);
+  }
+
+  makeChart(holder, 'Speed (km/h)', x, [
+    { label: 'A', stroke: ref.color, _vals: onA('speed') },
+    ...others.map(p => ({ label: pickLetter(p), stroke: p.color, width: 1.2, _vals: cache.get(p).speed })),
+  ]);
+
+  // With several laps, green/red channel colours would collide with the lap
+  // colours, so the overlay encodes the channel as line style instead.
+  makeChart(holder, multi ? 'Throttle (solid) / Brake (dashed) %' : 'Throttle / Brake %', x,
+    multi
+      ? [ref, ...others].flatMap(p => {
+          const thr = p === ref ? onA('thr') : cache.get(p).thr;
+          const brk = p === ref ? onA('brk') : cache.get(p).brk;
+          return [
+            { label: `thr ${pickLetter(p)}`, stroke: p.color, width: 1.2, _vals: thr },
+            { label: `brk ${pickLetter(p)}`, stroke: p.color, dash: [5,5], width: 1.1, _vals: brk },
+          ];
+        })
+      : [
+          { label: 'throttle', stroke: '#34d399', _vals: onA('thr') },
+          { label: 'brake',    stroke: '#f87171', _vals: onA('brk') },
+        ]);
+
+  makeChart(holder, 'Steering %', x, [
+    { label: 'A', stroke: multi ? ref.color : '#93a3b8', _vals: onA('str') },
+    ...others.map(p => ({ label: pickLetter(p), stroke: p.color, width: 1.2, _vals: cache.get(p).str })),
+  ], 120);
+
+  makeChart(holder,
+    `Tyre combined slip — front / rear${multi ? ' (A only)' : ''}  ·  1.0 = grip limit`, x, [
+    { label: 'front', stroke: '#fbbf24', _vals: onA('slip_front') },
+    { label: 'rear',  stroke: '#f87171', _vals: onA('slip_rear') },
+  ], 140);
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Analysis map — racing line of the picked laps, linked to the chart cursor
+// ══════════════════════════════════════════════════════════════════════════════
+const mapCursor = { idx: null, pin: null, proj: null, snap: null, dpr: 1 };
+
+function setMapCursor(idx) {
+  if (idx === mapCursor.idx) return;
+  mapCursor.idx = idx;
+  drawMapMarker();
+  updateRawTable(idx ?? mapCursor.pin);
+}
+
+function togglePin(idx) {
+  if (idx == null) return;
+  mapCursor.pin = mapCursor.pin === idx ? null : idx;
+  drawMapMarker();
+  updateRawTable(mapCursor.idx ?? mapCursor.pin);
+  for (const c of state.charts) c.redraw();
+}
+
+function setColorMode(m) { state.colorMode = m; drawAnalysisMap(); }
+
+function slipColor(s) {
+  return `hsl(${Math.max(0, Math.min(120, 120 * (1.15 - s) / 1.15))}, 75%, 55%)`;
+}
+function speedColorOf(v, lo, hi) {
+  return `hsl(${220 - 220 * (hi > lo ? (v - lo) / (hi - lo) : 0)}, 80%, 55%)`;
+}
+
+function drawAnalysisMap() {
+  const canvas = $('#amap');
+  const wrap   = $('#amap-wrap');
+  if (!canvas || !wrap) return;
+  const W = wrap.clientWidth, H = wrap.clientHeight;
+  if (W < 10 || H < 10) return;
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr);
+  canvas.style.width = W + 'px';      canvas.style.height = H + 'px';
+
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(1,0,0,1,0,0);
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  mapCursor.dpr = dpr;
+
+  const picks = state.picks.filter(p => p.data);
+  if (!picks.length) {
+    ctx.fillStyle = cssVar('--muted') || '#44446a';
+    ctx.font = '12px monospace'; ctx.textAlign = 'center';
+    ctx.fillText('No laps selected', W / 2, H / 2);
+    mapCursor.proj = null; mapCursor.snap = null;
+    $('#amap-hint').textContent = '';
+    return;
+  }
+
+  // Fit every picked lap into the canvas with one shared projection so the
+  // racing lines are directly comparable.
+  let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+  for (const p of picks) {
+    for (const v of p.data.ch.x) { if (v < minX) minX = v; if (v > maxX) maxX = v; }
+    for (const v of p.data.ch.z) { if (v < minZ) minZ = v; if (v > maxZ) maxZ = v; }
+  }
+  const PAD = 26;
+  const rx = (maxX - minX) || 1, rz = (maxZ - minZ) || 1;
+  const scale = Math.min((W - PAD*2) / rx, (H - PAD*2) / rz);
+  const offX = (W - rx * scale) / 2, offZ = (H - rz * scale) / 2;
+  const proj = (x, y, z) => [offX + (x - minX) * scale, offZ + (z - minZ) * scale];
+  mapCursor.proj = proj;
+
+  ctx.fillStyle = cssVar('--bg') || '#07070e';
+  ctx.fillRect(0, 0, W, H);
+
+  const ref = refPick();
+  const zoom = state.zoomRange;
+
+  for (const p of picks) {
+    const c = p.data.ch, d = p.data.dist;
+    const isRef = p === ref;
+    const speeds = c.speed;
+    const lo = Math.min(...speeds), hi = Math.max(...speeds);
+
+    ctx.lineWidth = isRef ? 3 : 2;
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+
+    for (let i = 1; i < c.x.length; i++) {
+      const [ax, ay] = proj(c.x[i-1], c.y[i-1], c.z[i-1]);
+      const [bx, by] = proj(c.x[i],   c.y[i],   c.z[i]);
+      // Outside a drag-zoom window the line is dimmed rather than hidden, so
+      // the zoomed stretch reads in the context of the whole lap.
+      const inZoom = !zoom || (d[i] >= zoom[0] && d[i] <= zoom[1]);
+      let col;
+      if (state.colorMode === 'lap')        col = p.color;
+      else if (state.colorMode === 'slip')  col = slipColor(Math.max(c.slip_front[i], c.slip_rear[i]));
+      else                                  col = speedColorOf(speeds[i], lo, hi);
+      ctx.globalAlpha = inZoom ? (isRef ? 1 : 0.75) : 0.12;
+      ctx.strokeStyle = col;
+      ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
+    }
+  }
+  ctx.globalAlpha = 1;
+
+  // Start marker
+  if (ref) {
+    const [sx, sy] = proj(ref.data.ch.x[0], ref.data.ch.y[0], ref.data.ch.z[0]);
+    ctx.beginPath(); ctx.arc(sx, sy, 5, 0, Math.PI*2);
+    ctx.fillStyle = '#fff'; ctx.fill();
+  }
+
+  $('#amap-hint').textContent = zoom
+    ? 'zoomed to chart selection — double-click a chart to reset'
+    : (picks.length > 1 ? 'dot spread = racing-line difference at the cursor' : '');
+
+  // Cache the finished frame so hover only blits + paints the marker.
+  const snap = document.createElement('canvas');
+  snap.width = canvas.width; snap.height = canvas.height;
+  snap.getContext('2d').drawImage(canvas, 0, 0);
+  mapCursor.snap = snap;
+
+  drawMapMarker();
+}
+
+function drawMapMarker() {
+  const canvas = $('#amap');
+  const ref = refPick();
+  if (!canvas || !mapCursor.snap || !mapCursor.proj) return;
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(1,0,0,1,0,0);
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(mapCursor.snap, 0, 0);
+  ctx.setTransform(mapCursor.dpr,0,0,mapCursor.dpr,0,0);
+  if (!ref) return;
+
+  // The index lives on the reference lap's arrays; every other lap is marked at
+  // the same *track position* (its own lower bound on dist), so the spread of
+  // the dots is the racing-line difference at that spot.
+  const markAt = (idx, filled) => {
+    const ri   = Math.min(idx, ref.data.ch.x.length - 1);
+    const dist = ref.data.dist[ri];
+    const dot = (p, i, r) => {
+      const c = p.data.ch;
+      const j = Math.min(i, c.x.length - 1);
+      const [x, y] = mapCursor.proj(c.x[j], c.y[j], c.z[j]);
+      ctx.save();
+      ctx.shadowColor = p.color; ctx.shadowBlur = 10;
+      ctx.fillStyle   = filled ? p.color : (cssVar('--bg') || '#07070e');
+      ctx.strokeStyle = filled ? '#fff'  : p.color;
+      ctx.lineWidth   = filled ? 2 : 2.5;
+      ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI*2);
+      ctx.fill(); ctx.stroke();
+      ctx.restore();
+    };
+    for (const p of state.picks)
+      if (p.data && p !== ref) dot(p, lowerBound(p.data.dist, dist), 4.5);
+    dot(ref, ri, 6);   // reference last so it sits on top
+  };
+
+  if (mapCursor.pin != null) markAt(mapCursor.pin, false);
+  if (mapCursor.idx != null) markAt(mapCursor.idx, true);
+}
+
+function exportMapPng() {
+  const canvas = $('#amap');
+  if (!canvas || !state.picks.length) return;
+  canvas.toBlob(blob => {
+    if (!blob) return;
+    const s = state.session;
+    const name = `pitlane-${(s ? sessionLabel(s) : 'laps').replace(/[^\w-]+/g,'_')}-${state.picks.map(p => 'L'+p.lap).join('-')}.png`;
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }, 'image/png');
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Raw telemetry at cursor
+// ══════════════════════════════════════════════════════════════════════════════
+const RAW_GROUPS = [
+  ['Engine',      ['engine_rpm','engine_max_rpm','torque_nm','power_w','boost','fuel','gear','clutch_input','handbrake_input']],
+  ['Race',        ['race_position','current_race_time']],
+  ['Motion',      ['accel_x','accel_y','accel_z','vel_x','vel_y','vel_z','yaw','pitch','roll']],
+  ['G-force',     ['g_lateral','g_longitudinal','g_vertical']],
+  ['Suspension',  ['norm_susp_fl','norm_susp_fr','norm_susp_rl','norm_susp_rr',
+                   'susp_travel_m_fl','susp_travel_m_fr','susp_travel_m_rl','susp_travel_m_rr']],
+  ['Tyre slip',   ['tire_slip_ratio_fl','tire_slip_ratio_fr','tire_slip_ratio_rl','tire_slip_ratio_rr',
+                   'tire_slip_angle_fl','tire_slip_angle_fr','tire_slip_angle_rl','tire_slip_angle_rr']],
+  ['Tyre temp',   ['tire_temp_fl','tire_temp_fr','tire_temp_rl','tire_temp_rr']],
+  ['Wheels',      ['wheel_rot_speed_fl','wheel_rot_speed_fr','wheel_rot_speed_rl','wheel_rot_speed_rr']],
+];
+
+function renderRawTable() {
+  const t = $('#raw-table');
+  if (!state.showRaw) return;
+  const picks = state.picks.filter(p => p.raw);
+  if (!picks.length) {
+    t.innerHTML = '<tr><td class="no-laps" style="text-align:center">No raw data — pick a lap.</td></tr>';
+    return;
+  }
+  const head = `<tr><th>Channel</th>${picks.map(p =>
+    `<th style="color:${p.color}">${pickLetter(p)}</th>`).join('')}</tr>`;
+  const body = RAW_GROUPS.map(([label, fields]) => {
+    const rows = fields.filter(f => picks.some(p => p.raw[f]));
+    if (!rows.length) return '';
+    return `<tr class="grp"><td colspan="${picks.length + 1}">${label}</td></tr>` +
+      rows.map(f => `<tr data-f="${f}"><td>${f}</td>${picks.map(() => '<td>—</td>').join('')}</tr>`).join('');
+  }).join('');
+  t.innerHTML = head + body;
+  updateRawTable(mapCursor.idx ?? mapCursor.pin);
+}
+
+function updateRawTable(idx) {
+  if (!state.showRaw) return;
+  const t = $('#raw-table');
+  const ref = refPick();
+  if (!t || !ref || idx == null) return;
+  const picks = state.picks.filter(p => p.raw);
+  const dist  = ref.data.dist[Math.min(idx, ref.data.dist.length - 1)];
+  t.querySelectorAll('tr[data-f]').forEach(tr => {
+    const f = tr.dataset.f;
+    picks.forEach((p, i) => {
+      const arr = p.raw[f];
+      const cell = tr.children[i + 1];
+      if (!cell) return;
+      if (!arr) { cell.textContent = '—'; return; }
+      const j = Math.min(lowerBound(p.data.dist, dist), arr.length - 1);
+      cell.textContent = arr[j] != null ? String(arr[j]) : '—';
+    });
+  });
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Session rename / grouping
+// ══════════════════════════════════════════════════════════════════════════════
+async function saveGroups() {
+  try {
+    await fetch('/api/groups', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(state.groups),
+    });
+  } catch (e) { console.warn('Group save failed', e); }
+}
+
+async function renameSession() {
+  const s = state.session;
+  if (!s) return;
+  const cur  = state.groups.renames[s.session_id] || getCarName(s.car_ordinal);
+  const next = prompt('Session name:', cur);
+  if (next == null) return;
+  if (next.trim()) state.groups.renames[s.session_id] = next.trim();
+  else delete state.groups.renames[s.session_id];
+  await saveGroups();
+  renderSessionList();
+  $('#hdr-car').textContent = sessionLabel(s) + (s.drivetrain ? `  ·  ${s.drivetrain}` : '');
+}
+
+async function groupSession() {
+  const s = state.session;
+  if (!s) return;
+  const existing = groupOf(s.session_id);
+  const names = state.groups.groups.map(g => g.name);
+  const msg = existing
+    ? `Currently in "${existing.name}". Enter a new group name, or leave blank to ungroup.`
+    : `Group name${names.length ? ` (existing: ${names.join(', ')})` : ''}:`;
+  const name = prompt(msg, existing ? existing.name : '');
+  if (name == null) return;
+
+  // Drop it from whatever group it was in first, so a rename can't duplicate it.
+  for (const g of state.groups.groups)
+    g.session_ids = (g.session_ids || []).filter(id => id !== s.session_id);
+
+  if (name.trim()) {
+    let g = state.groups.groups.find(x => x.name === name.trim());
+    if (!g) { g = { name: name.trim(), session_ids: [] }; state.groups.groups.push(g); }
+    g.session_ids.push(s.session_id);
+  }
+  state.groups.groups = state.groups.groups.filter(g => (g.session_ids || []).length);
+  await saveGroups();
+  renderSessionList();
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Track Map tab (2D / 3D with contacts and jumps)
 // ══════════════════════════════════════════════════════════════════════════════
 async function loadTrackData(sid) {
-  document.getElementById('map-loading').textContent = 'LOADING TRACK DATA…';
-  document.getElementById('map-loading').style.display = 'flex';
+  $('#map-loading').textContent = 'LOADING TRACK DATA…';
+  $('#map-loading').style.display = 'flex';
   try {
-    const res = await fetch(`/api/sessions/${sid}/track`);
-    trackData  = await res.json();
+    trackData = await (await fetch(`/api/sessions/${sid}/track`)).json();
     populateMapLapSelector();
-    document.getElementById('map-loading').style.display = 'none';
-
-    // Update speed legend label
+    $('#map-loading').style.display = 'none';
     if (trackData.points.length) {
-      const maxSpd = Math.max(...trackData.points.map(p => p.spd));
-      document.getElementById('max-speed-lbl').textContent = `${Math.round(maxSpd)} km/h`;
+      $('#max-speed-lbl').textContent = `${Math.round(Math.max(...trackData.points.map(p => p.spd)))} km/h`;
     }
-
-    // Show event summary in bar
     updateMapEventBar();
-
-    // Draw if track map tab is active
-    if (document.getElementById('tab-trackmap').classList.contains('active')) {
-      drawCurrentMap();
-    }
-  } catch (e) {
-    document.getElementById('map-loading').textContent = 'TRACK DATA UNAVAILABLE';
+    if ($('#tab-trackmap').classList.contains('active')) drawCurrentMap();
+  } catch {
+    $('#map-loading').textContent = 'TRACK DATA UNAVAILABLE';
   }
 }
 
 function populateMapLapSelector() {
-  const sel = document.getElementById('map-lap-select');
+  const sel = $('#map-lap-select');
   sel.innerHTML = '<option value="">All laps</option>';
   if (!trackData) return;
   for (const lap of trackData.laps) {
     const opt = document.createElement('option');
-    opt.value = lap;
-    opt.textContent = `Lap ${lap}`;
+    opt.value = lap; opt.textContent = `Lap ${lap}`;
     sel.appendChild(opt);
   }
-  mapLap = null;
-  sel.value = '';
+  mapLap = null; sel.value = '';
 }
 
 function onMapLapChange() {
-  const v = document.getElementById('map-lap-select').value;
-  mapLap   = v === '' ? null : parseInt(v, 10);
-  updateMapEventBar();
-  drawCurrentMap();
+  const v = $('#map-lap-select').value;
+  mapLap = v === '' ? null : parseInt(v, 10);
+  updateMapEventBar(); drawCurrentMap();
 }
 
 function setMapView(mode) {
   mapView = mode;
-  document.getElementById('btn2d').classList.toggle('active', mode === '2d');
-  document.getElementById('btn3d').classList.toggle('active', mode === '3d');
+  $('#btn2d').classList.toggle('active', mode === '2d');
+  $('#btn3d').classList.toggle('active', mode === '3d');
   drawCurrentMap();
 }
 
 function updateMapEventBar() {
-  const bar = document.getElementById('map-event-bar');
+  const bar = $('#map-event-bar');
   if (!trackData) { bar.innerHTML = ''; return; }
-
-  // Filter events for the visible lap range
-  let points  = trackData.points;
-  let contacts = trackData.contacts;
-  let jumps    = trackData.jumps;
-
+  let contacts = trackData.contacts, jumps = trackData.jumps;
   if (mapLap != null) {
     const range = trackData.lap_ranges?.[String(mapLap)];
     if (range) {
@@ -788,698 +1354,192 @@ function updateMapEventBar() {
       jumps    = jumps.filter(j => j.start_idx >= lo && j.end_idx <= hi);
     }
   }
-
   const parts = [];
-  if (contacts.length) {
-    const maxG = Math.max(...contacts.map(c => c.g)).toFixed(1);
-    parts.push(`<span style="color:var(--red)">●</span> ${contacts.length} contact${contacts.length !== 1 ? 's' : ''} (peak ${maxG} G)`);
-  }
-  if (jumps.length) {
-    parts.push(`<span style="color:var(--cyan)">─</span> ${jumps.length} jump${jumps.length !== 1 ? 's' : ''}`);
-  }
-  if (!contacts.length && !jumps.length && trackData.points.length) {
+  if (contacts.length)
+    parts.push(`<span style="color:var(--red)">●</span> ${contacts.length} contact${contacts.length!==1?'s':''} (peak ${Math.max(...contacts.map(c=>c.g)).toFixed(1)} G)`);
+  if (jumps.length)
+    parts.push(`<span style="color:var(--cyan)">─</span> ${jumps.length} jump${jumps.length!==1?'s':''}`);
+  if (!contacts.length && !jumps.length && trackData.points.length)
     parts.push('<span style="color:var(--muted)">No contacts or jumps detected</span>');
-  }
   bar.innerHTML = parts.join('  ·  ');
 }
 
-// ── Canvas drawing ──────────────────────────────────────────────────────────
-
 function drawCurrentMap() {
   if (!trackData || !trackData.points.length) return;
-  const canvas = document.getElementById('track-canvas');
-  const wrap   = document.getElementById('map-canvas-wrap');
-  const dpr    = devicePixelRatio || 1;
-  const W      = wrap.clientWidth;
-  const H      = wrap.clientHeight;
+  const canvas = $('#track-canvas'), wrap = $('#map-canvas-wrap');
+  const dpr = devicePixelRatio || 1;
+  const W = wrap.clientWidth, H = wrap.clientHeight;
   if (!W || !H) return;
-  canvas.width  = Math.floor(W * dpr);
-  canvas.height = Math.floor(H * dpr);
-  canvas.style.width  = W + 'px';
-  canvas.style.height = H + 'px';
+  canvas.width = Math.floor(W * dpr); canvas.height = Math.floor(H * dpr);
+  canvas.style.width = W + 'px';      canvas.style.height = H + 'px';
   const ctx = canvas.getContext('2d');
-  ctx.scale(dpr, dpr);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-  // Filter points by lap selection
-  let pts = mapLap != null
-    ? trackData.points.filter(p => p.lap === mapLap)
-    : trackData.points;
+  const pts = mapLap != null ? trackData.points.filter(p => p.lap === mapLap) : trackData.points;
   if (!pts.length) return;
-
   const maxSpd = Math.max(...pts.map(p => p.spd)) || 1;
-
-  function speedColor(spd) {
-    const t   = Math.min(spd / maxSpd, 1);
-    const hue = 240 - t * 240;
-    return `hsl(${hue},100%,${50 + (1-t)*5}%)`;
-  }
-
-  if (mapView === '2d') {
-    draw2DMap(ctx, W, H, pts, trackData.contacts, trackData.jumps, speedColor);
-  } else {
-    draw3DMap(ctx, W, H, pts, trackData.contacts, trackData.jumps, trackData.bounds, speedColor);
-  }
+  const speedColor = (spd) => {
+    const t = Math.min(spd / maxSpd, 1);
+    return `hsl(${240 - t * 240},100%,${50 + (1-t)*5}%)`;
+  };
+  if (mapView === '2d') draw2DMap(ctx, W, H, pts, trackData.contacts, trackData.jumps, speedColor);
+  else draw3DMap(ctx, W, H, pts, trackData.contacts, trackData.jumps, trackData.bounds, speedColor);
 }
 
 function draw2DMap(ctx, W, H, pts, contacts, jumps, speedColor) {
   ctx.clearRect(0, 0, W, H);
-
   const pad = 28;
-  const xs  = pts.map(p => p.x), zs = pts.map(p => p.z);
+  const xs = pts.map(p => p.x), zs = pts.map(p => p.z);
   const minX = Math.min(...xs), maxX = Math.max(...xs);
   const minZ = Math.min(...zs), maxZ = Math.max(...zs);
   const rangeX = maxX - minX || 1, rangeZ = maxZ - minZ || 1;
-  const scaleX = (W - pad*2) / rangeX;
-  const scaleZ = (H - pad*2) / rangeZ;
-  const scale  = Math.min(scaleX, scaleZ);
-  const offX   = (W - rangeX * scale) / 2;
-  const offZ   = (H - rangeZ * scale) / 2;
+  const scale = Math.min((W - pad*2) / rangeX, (H - pad*2) / rangeZ);
+  const offX = (W - rangeX * scale) / 2, offZ = (H - rangeZ * scale) / 2;
+  const project = (x, z) => ({ cx: offX + (x - minX) * scale, cy: offZ + (z - minZ) * scale });
 
-  function project(x, z) {
-    return { cx: offX + (x - minX) * scale, cy: offZ + (z - minZ) * scale };
-  }
-
-  // Dark ground fill
-  ctx.fillStyle = '#07070e';
+  ctx.fillStyle = cssVar('--bg') || '#07070e';
   ctx.fillRect(0, 0, W, H);
 
-  // Track shadow (wider, dark)
-  ctx.lineWidth = 7;
-  ctx.strokeStyle = 'rgba(0,0,0,0.5)';
-  ctx.lineCap = 'round';
-  ctx.lineJoin = 'round';
+  ctx.lineWidth = 7; ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
   ctx.beginPath();
-  for (let i = 0; i < pts.length; i++) {
-    const {cx,cy} = project(pts[i].x, pts[i].z);
-    i === 0 ? ctx.moveTo(cx,cy) : ctx.lineTo(cx,cy);
-  }
+  pts.forEach((p, i) => { const {cx,cy} = project(p.x, p.z); i === 0 ? ctx.moveTo(cx,cy) : ctx.lineTo(cx,cy); });
   ctx.stroke();
 
-  // Colored track (speed gradient)
-  ctx.lineWidth = 3;
-  ctx.lineCap   = 'round';
+  ctx.lineWidth = 3; ctx.lineCap = 'round';
   for (let i = 1; i < pts.length; i++) {
-    const a = project(pts[i-1].x, pts[i-1].z);
-    const b = project(pts[i].x,   pts[i].z);
+    const a = project(pts[i-1].x, pts[i-1].z), b = project(pts[i].x, pts[i].z);
     ctx.beginPath();
     ctx.strokeStyle = speedColor((pts[i].spd + pts[i-1].spd) / 2);
-    ctx.moveTo(a.cx, a.cy);
-    ctx.lineTo(b.cx, b.cy);
-    ctx.stroke();
+    ctx.moveTo(a.cx, a.cy); ctx.lineTo(b.cx, b.cy); ctx.stroke();
   }
-
-  // Jumps (dashed cyan)
   for (const j of jumps) {
-    const si = Math.min(j.start_idx, pts.length - 1);
-    const ei = Math.min(j.end_idx,   pts.length - 1);
-    const a  = project(pts[si].x, pts[si].z);
-    const b  = project(pts[ei].x, pts[ei].z);
-    ctx.beginPath();
-    ctx.strokeStyle = '#00c8f0';
-    ctx.lineWidth   = 3;
-    ctx.setLineDash([5, 4]);
-    ctx.moveTo(a.cx, a.cy); ctx.lineTo(b.cx, b.cy);
-    ctx.stroke();
-    ctx.setLineDash([]);
+    const a = project(pts[Math.min(j.start_idx, pts.length-1)].x, pts[Math.min(j.start_idx, pts.length-1)].z);
+    const b = project(pts[Math.min(j.end_idx, pts.length-1)].x,   pts[Math.min(j.end_idx, pts.length-1)].z);
+    ctx.beginPath(); ctx.strokeStyle = '#00c8f0'; ctx.lineWidth = 3; ctx.setLineDash([5,4]);
+    ctx.moveTo(a.cx, a.cy); ctx.lineTo(b.cx, b.cy); ctx.stroke(); ctx.setLineDash([]);
   }
-
-  // Contacts (red dots)
   for (const c of contacts) {
     if (c.idx >= pts.length) continue;
     const {cx,cy} = project(pts[c.idx].x, pts[c.idx].z);
-    ctx.beginPath();
-    ctx.arc(cx, cy, 5, 0, Math.PI * 2);
-    ctx.fillStyle = '#e03838';
-    ctx.fill();
-    ctx.lineWidth = 1.5;
-    ctx.strokeStyle = '#ff8888';
-    ctx.stroke();
+    ctx.beginPath(); ctx.arc(cx, cy, 5, 0, Math.PI*2);
+    ctx.fillStyle = '#e03838'; ctx.fill();
+    ctx.lineWidth = 1.5; ctx.strokeStyle = '#ff8888'; ctx.stroke();
   }
-
-  // Start marker
   const s0 = project(pts[0].x, pts[0].z);
-  ctx.beginPath();
-  ctx.arc(s0.cx, s0.cy, 5, 0, Math.PI * 2);
-  ctx.fillStyle = '#ffffff';
-  ctx.fill();
+  ctx.beginPath(); ctx.arc(s0.cx, s0.cy, 5, 0, Math.PI*2); ctx.fillStyle = '#fff'; ctx.fill();
 }
 
 function draw3DMap(ctx, W, H, pts, contacts, jumps, bounds, speedColor) {
   ctx.clearRect(0, 0, W, H);
-
-  const cX = (bounds.minX + bounds.maxX) / 2;
-  const cZ = (bounds.minZ + bounds.maxZ) / 2;
+  const cX = (bounds.minX + bounds.maxX) / 2, cZ = (bounds.minZ + bounds.maxZ) / 2;
   const rangeXZ = Math.max(bounds.maxX - bounds.minX, bounds.maxZ - bounds.minZ) || 1;
   const SQRT2 = 1.41421356;
-
-  // Elevation exaggeration: show up to 40% of horizontal extent
   const elevExag = Math.min(0.5, (bounds.maxY - bounds.minY) / rangeXZ * 4);
-
-  function project3D(x, y, z) {
-    const nx = (x - cX) / rangeXZ;
-    const nz = (z - cZ) / rangeXZ;
-    const ny = (y - bounds.minY) / rangeXZ; // physical proportion, no normalize
-
-    // Standard isometric projection
+  const project3D = (x, y, z) => {
+    const nx = (x - cX) / rangeXZ, nz = (z - cZ) / rangeXZ, ny = (y - bounds.minY) / rangeXZ;
     const isoX = (nx - nz) / SQRT2;
     const isoY = (nx + nz) / (2 * SQRT2) - ny * elevExag;
-
     const scale = Math.min(W, H) * 0.42;
     return { cx: W/2 + isoX * scale, cy: H/2 + isoY * scale };
-  }
-
-  ctx.fillStyle = '#07070e';
+  };
+  ctx.fillStyle = cssVar('--bg') || '#07070e';
   ctx.fillRect(0, 0, W, H);
 
-  // Ground shadow
-  ctx.lineWidth   = 7;
-  ctx.strokeStyle = 'rgba(0,0,0,0.4)';
-  ctx.lineCap     = 'round';
-  ctx.lineJoin    = 'round';
+  ctx.lineWidth = 7; ctx.strokeStyle = 'rgba(0,0,0,0.4)';
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
   ctx.beginPath();
-  for (let i = 0; i < pts.length; i++) {
-    const {cx,cy} = project3D(pts[i].x, bounds.minY, pts[i].z);
-    i === 0 ? ctx.moveTo(cx,cy) : ctx.lineTo(cx,cy);
-  }
+  pts.forEach((p, i) => { const {cx,cy} = project3D(p.x, bounds.minY, p.z); i === 0 ? ctx.moveTo(cx,cy) : ctx.lineTo(cx,cy); });
   ctx.stroke();
 
-  // Colored track
-  ctx.lineWidth = 2.5;
-  ctx.lineCap   = 'round';
+  ctx.lineWidth = 2.5; ctx.lineCap = 'round';
   for (let i = 1; i < pts.length; i++) {
-    const a = project3D(pts[i-1].x, pts[i-1].y, pts[i-1].z);
-    const b = project3D(pts[i].x,   pts[i].y,   pts[i].z);
+    const a = project3D(pts[i-1].x, pts[i-1].y, pts[i-1].z), b = project3D(pts[i].x, pts[i].y, pts[i].z);
     ctx.beginPath();
     ctx.strokeStyle = speedColor((pts[i].spd + pts[i-1].spd) / 2);
-    ctx.moveTo(a.cx, a.cy);
-    ctx.lineTo(b.cx, b.cy);
-    ctx.stroke();
+    ctx.moveTo(a.cx, a.cy); ctx.lineTo(b.cx, b.cy); ctx.stroke();
   }
-
-  // Jumps
   for (const j of jumps) {
-    const si = Math.min(j.start_idx, pts.length - 1);
-    const ei = Math.min(j.end_idx,   pts.length - 1);
-    const a  = project3D(pts[si].x, pts[si].y, pts[si].z);
-    const b  = project3D(pts[ei].x, pts[ei].y, pts[ei].z);
-    ctx.beginPath();
-    ctx.strokeStyle = '#00c8f0';
-    ctx.lineWidth   = 3;
-    ctx.setLineDash([5,4]);
-    ctx.moveTo(a.cx, a.cy); ctx.lineTo(b.cx, b.cy);
-    ctx.stroke();
-    ctx.setLineDash([]);
+    const si = Math.min(j.start_idx, pts.length-1), ei = Math.min(j.end_idx, pts.length-1);
+    const a = project3D(pts[si].x, pts[si].y, pts[si].z), b = project3D(pts[ei].x, pts[ei].y, pts[ei].z);
+    ctx.beginPath(); ctx.strokeStyle = '#00c8f0'; ctx.lineWidth = 3; ctx.setLineDash([5,4]);
+    ctx.moveTo(a.cx, a.cy); ctx.lineTo(b.cx, b.cy); ctx.stroke(); ctx.setLineDash([]);
   }
-
-  // Contacts
   for (const c of contacts) {
     if (c.idx >= pts.length) continue;
     const {cx,cy} = project3D(pts[c.idx].x, pts[c.idx].y, pts[c.idx].z);
-    ctx.beginPath();
-    ctx.arc(cx, cy, 5, 0, Math.PI * 2);
-    ctx.fillStyle = '#e03838';
-    ctx.fill();
-    ctx.lineWidth = 1.5;
-    ctx.strokeStyle = '#ff8888';
-    ctx.stroke();
+    ctx.beginPath(); ctx.arc(cx, cy, 5, 0, Math.PI*2);
+    ctx.fillStyle = '#e03838'; ctx.fill();
+    ctx.lineWidth = 1.5; ctx.strokeStyle = '#ff8888'; ctx.stroke();
   }
-
-  // Start
   const s0 = project3D(pts[0].x, pts[0].y, pts[0].z);
-  ctx.beginPath();
-  ctx.arc(s0.cx, s0.cy, 5, 0, Math.PI * 2);
-  ctx.fillStyle = '#ffffff';
-  ctx.fill();
+  ctx.beginPath(); ctx.arc(s0.cx, s0.cy, 5, 0, Math.PI*2); ctx.fillStyle = '#fff'; ctx.fill();
 
-  // Elevation indicator (only if meaningful)
   const elevRange = bounds.maxY - bounds.minY;
   if (elevRange > 5) {
     ctx.fillStyle = 'rgba(255,255,255,0.35)';
-    ctx.font = '10px Courier New';
-    ctx.textAlign = 'right';
+    ctx.font = '10px Courier New'; ctx.textAlign = 'right';
     ctx.fillText(`↕ ${Math.round(elevRange)} m elev`, W - 10, H - 10);
   }
 }
 
-// ── Track canvas resize ─────────────────────────────────────────────────────
 function initMapObserver() {
   if (_mapObserver) _mapObserver.disconnect();
-  const wrap = document.getElementById('map-canvas-wrap');
   _mapObserver = new ResizeObserver(() => {
-    if (document.getElementById('tab-trackmap').classList.contains('active')) {
-      drawCurrentMap();
-    }
+    if ($('#tab-trackmap').classList.contains('active')) drawCurrentMap();
+    if ($('#tab-analysis').classList.contains('active')) drawAnalysisMap();
   });
-  _mapObserver.observe(wrap);
+  _mapObserver.observe($('#map-canvas-wrap'));
+  _mapObserver.observe($('#amap-wrap'));
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// Lap Compare
+// Tabs / redraw
 // ══════════════════════════════════════════════════════════════════════════════
-function buildComparePicker(laps) {
-  const grid = document.getElementById('compare-lap-grid');
-  selectedLaps.clear();
-  // Color keyed by lap_number mod 5 — consistent with legend and chart rendering
-  grid.innerHTML = laps.map(l => {
-    const col = CMP_COLORS[l.lap_number % CMP_COLORS.length];
-    return `<button class="cmp-lap-btn" data-lap="${l.lap_number}"
-               data-col="${col}"
-               onclick="toggleCompareLap(this)">${fmtTime(l.lap_time)} <span style="opacity:0.5">L${l.lap_number}</span></button>`;
-  }).join('');
+function redrawAll() {
+  drawCharts();
+  drawAnalysisMap();
+  renderRawTable();
 }
-
-function toggleCompareLap(btn) {
-  const lap = parseInt(btn.dataset.lap, 10);
-  const col = btn.dataset.col;
-  if (btn.classList.contains('sel')) {
-    btn.classList.remove('sel');
-    btn.style.background = '';
-    btn.style.color      = '';
-    selectedLaps.delete(lap);
-  } else {
-    if (selectedLaps.size >= 5) {
-      const msg = document.createElement('span');
-      msg.textContent = ' max 5 laps';
-      msg.style.cssText = 'font-size:0.65rem;color:var(--red);margin-left:4px';
-      btn.parentElement.appendChild(msg);
-      setTimeout(() => msg.remove(), 2000);
-      return;
-    }
-    btn.classList.add('sel');
-    btn.style.background = col;
-    btn.style.color      = '#07070e';
-    selectedLaps.add(lap);
-  }
-}
-
-async function runCompare() {
-  if (!activeSession || !selectedLaps.size) return;
-  const lapStr = [...selectedLaps].sort((a,b) => a-b).join(',');
-  const wrap   = document.getElementById('compare-charts-wrap');
-  wrap.innerHTML = '<div style="padding:32px;text-align:center;color:var(--muted);font-size:0.78rem;letter-spacing:1px">LOADING…</div>';
-
-  try {
-    const res  = await fetch(`/api/sessions/${activeSession.session_id}/compare?laps=${lapStr}`);
-    compareData = await res.json();
-  } catch {
-    wrap.innerHTML = '<div style="padding:32px;text-align:center;color:var(--red);font-size:0.78rem">Failed to load comparison data</div>';
-    return;
-  }
-
-  if (!compareData.length) {
-    wrap.innerHTML = '<div style="padding:32px;text-align:center;color:var(--muted);font-size:0.78rem;letter-spacing:1px">NO DATA — telemetry may not include this lap</div>';
-    return;
-  }
-
-  // Build legend
-  const legend = document.getElementById('cmp-legend');
-  const allLaps = [...selectedLaps].sort((a,b) => a-b);
-  legend.innerHTML = allLaps.map(lap => {
-    const col = CMP_COLORS[lap % CMP_COLORS.length];
-    return `<div class="cmp-leg">
-      <div class="cmp-leg-line" style="background:${col}"></div>
-      <span>Lap ${lap}</span>
-    </div>`;
-  }).join('');
-
-  renderCompareCharts();
-}
-
-function renderCompareCharts() {
-  const wrap   = document.getElementById('compare-charts-wrap');
-  wrap.innerHTML = '';
-
-  const metrics = [
-    { key:'spd', label:'SPEED',    unit:'km/h', yMin:0, yMax:null, highlight:false },
-    { key:'thr', label:'THROTTLE', unit:'%',    yMin:0, yMax:100,  highlight:true  },
-    { key:'brk', label:'BRAKE',    unit:'%',    yMin:0, yMax:100,  highlight:true  },
-    { key:'str', label:'STEERING', unit:'',     yMin:-1, yMax:1,   highlight:false },
-  ];
-
-  metrics.forEach((m, mi) => {
-    const isLast = mi === metrics.length - 1;
-    const row    = document.createElement('div');
-    row.className = 'chart-canvas-row';
-    row.style.borderBottom = isLast ? 'none' : '1px solid var(--border)';
-    const canvas = document.createElement('canvas');
-    canvas.height = 100;
-    row.appendChild(canvas);
-    wrap.appendChild(row);
-
-    // Defer draw until layout settles
-    requestAnimationFrame(() => {
-      const W  = wrap.clientWidth || 600;
-      const dpr = devicePixelRatio || 1;
-      canvas.width  = Math.floor(W * dpr);
-      canvas.height = 100 * dpr;
-      canvas.style.width  = W + 'px';
-      canvas.style.height = '100px';
-      const ctx = canvas.getContext('2d');
-      ctx.scale(dpr, dpr);
-      drawCompareChart(ctx, W, 100, m.key, m.label, m.unit, m.yMin, m.yMax, isLast, compareData);
-    });
-  });
-}
-
-function drawCompareChart(ctx, W, H, key, label, unit, yMin, yMax, showXAxis, data) {
-  const padL = 52, padR = 14, padT = 20, padB = showXAxis ? 24 : 6;
-  const plotW = W - padL - padR;
-  const plotH = H - padT - padB;
-
-  // Compute Y range
-  let minVal = yMin, maxVal = yMax;
-  if (maxVal == null) {
-    maxVal = 0;
-    for (const d of data)
-      for (const p of d.data) maxVal = Math.max(maxVal, p[key]);
-    maxVal = Math.ceil(maxVal / 20) * 20 || 100;
-  }
-  const maxDist = Math.max(...data.map(d => d.max_dist), 1);
-
-  // BG
-  ctx.fillStyle = '#07070e';
-  ctx.fillRect(0, 0, W, H);
-
-  // Y grid + labels
-  const GRID_N = key === 'str' ? 4 : 4;
-  ctx.strokeStyle = 'rgba(26,26,56,0.8)';
-  ctx.lineWidth   = 0.5;
-  for (let i = 0; i <= GRID_N; i++) {
-    const y   = padT + (plotH / GRID_N) * i;
-    const val = maxVal - (maxVal - minVal) * i / GRID_N;
-    ctx.beginPath();
-    ctx.moveTo(padL, y); ctx.lineTo(padL + plotW, y);
-    ctx.stroke();
-    ctx.fillStyle  = '#44446a';
-    ctx.font       = '9px Courier New';
-    ctx.textAlign  = 'right';
-    ctx.fillText(
-      key === 'str' ? val.toFixed(1) : Math.round(val) + (unit || ''),
-      padL - 4, y + 3
-    );
-  }
-
-  // X grid
-  for (let i = 0; i <= 4; i++) {
-    const x    = padL + (plotW / 4) * i;
-    const dist = (maxDist / 4) * i;
-    ctx.strokeStyle = 'rgba(26,26,56,0.5)';
-    ctx.lineWidth   = 0.5;
-    ctx.beginPath();
-    ctx.moveTo(x, padT); ctx.lineTo(x, padT + plotH);
-    ctx.stroke();
-    if (showXAxis) {
-      ctx.fillStyle = '#44446a';
-      ctx.font      = '9px Courier New';
-      ctx.textAlign = 'center';
-      ctx.fillText(
-        dist < 1000 ? `${Math.round(dist)}m` : `${(dist/1000).toFixed(1)}km`,
-        x, H - 4
-      );
-    }
-  }
-
-  // Zero line for steering
-  if (key === 'str') {
-    const y0 = padT + plotH - (0 - minVal) / (maxVal - minVal) * plotH;
-    ctx.strokeStyle = 'rgba(255,255,255,0.08)';
-    ctx.lineWidth   = 1;
-    ctx.beginPath();
-    ctx.moveTo(padL, y0); ctx.lineTo(padL + plotW, y0);
-    ctx.stroke();
-  }
-
-  // Chart label
-  ctx.fillStyle = '#8888b8';
-  ctx.font      = 'bold 9px Courier New';
-  ctx.textAlign = 'left';
-  ctx.fillText(label, padL + 4, padT - 4);
-
-  // Border
-  ctx.strokeStyle = '#1a1a38';
-  ctx.lineWidth   = 1;
-  ctx.strokeRect(padL, padT, plotW, plotH);
-
-  // Lines per lap
-  data.forEach((lapData, li) => {
-    const color = CMP_COLORS[lapData.lap % CMP_COLORS.length];
-    ctx.strokeStyle = color;
-    ctx.lineWidth   = 1.5;
-    ctx.lineJoin    = 'round';
-    ctx.lineCap     = 'round';
-
-    ctx.beginPath();
-    let moved = false;
-    for (const p of lapData.data) {
-      const x   = padL + (p.d / maxDist) * plotW;
-      const val = p[key];
-      const clamped = Math.max(minVal, Math.min(maxVal, val));
-      const y   = padT + plotH - (clamped - minVal) / (maxVal - minVal) * plotH;
-      if (!moved) { ctx.moveTo(x, y); moved = true; }
-      else          ctx.lineTo(x, y);
-    }
-    ctx.stroke();
-  });
-}
-
-// ══════════════════════════════════════════════════════════════════════════════
-// Analysis Tab — time-series charts
-// ══════════════════════════════════════════════════════════════════════════════
-let _analysisPoints = [];
 
 function switchTab(name) {
-  document.querySelectorAll('.tab-btn').forEach(b =>
-    b.classList.toggle('active', b.dataset.tab === name));
-  document.querySelectorAll('.tab-panel').forEach(p =>
-    p.classList.toggle('active', p.id === 'tab-' + name));
-
-  if (name === 'trackmap') {
-    requestAnimationFrame(() => drawCurrentMap());
-  }
-  if (name === 'analysis') {
-    requestAnimationFrame(() => drawAnalysisCharts());
-  }
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === 'tab-' + name));
+  if (name === 'trackmap') requestAnimationFrame(() => drawCurrentMap());
+  if (name === 'analysis') requestAnimationFrame(() => redrawAll());
 }
-
-async function loadAnalysis() {
-  const minutes = document.getElementById('analysis-minutes').value;
-  const sid     = activeSession ? activeSession.session_id : '';
-  const statusEl = document.getElementById('analysis-status');
-  statusEl.textContent = 'Loading…';
-
-  try {
-    const url = sid
-      ? `/api/analysis/telemetry?session_id=${sid}&minutes=${minutes}`
-      : `/api/analysis/telemetry?minutes=${minutes}`;
-    const res  = await fetch(url);
-    const data = await res.json();
-    _analysisPoints = data.points || [];
-    statusEl.textContent = `${_analysisPoints.length} points · ${data.duration}s`;
-    drawAnalysisCharts();
-  } catch (e) {
-    statusEl.textContent = 'Load failed';
-  }
-}
-
-function drawAnalysisChart(canvasId, series, opts) {
-  const canvas = document.getElementById(canvasId);
-  if (!canvas) return;
-  const W = canvas.parentElement.offsetWidth || 700;
-  canvas.width  = W;
-  canvas.height = canvas.height || 120;
-  const H   = canvas.height;
-  const ctx = canvas.getContext('2d');
-  const pad = { t: 20, b: 28, l: 50, r: 16 };
-  const pw  = W - pad.l - pad.r;
-  const ph  = H - pad.t - pad.b;
-
-  ctx.clearRect(0, 0, W, H);
-
-  // Background
-  ctx.fillStyle = 'rgba(13,13,28,0.6)';
-  ctx.fillRect(0, 0, W, H);
-
-  if (!_analysisPoints.length) {
-    ctx.fillStyle = '#44446a';
-    ctx.font = '12px monospace';
-    ctx.textAlign = 'center';
-    ctx.fillText('Click LOAD to fetch telemetry', W / 2, H / 2);
-    return;
-  }
-
-  const points = opts.preprocess ? opts.preprocess(_analysisPoints) : _analysisPoints;
-  const tMax   = points[points.length - 1].t || 1;
-
-  // Grid lines
-  ctx.strokeStyle = '#1a1a38';
-  ctx.lineWidth   = 0.5;
-  for (let g = 0; g <= 4; g++) {
-    const y = pad.t + (g / 4) * ph;
-    ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(pad.l + pw, y); ctx.stroke();
-  }
-
-  // Y-axis labels
-  ctx.fillStyle = '#44446a';
-  ctx.font = '9px monospace';
-  ctx.textAlign = 'right';
-  for (let g = 0; g <= 4; g++) {
-    const v   = opts.max - (g / 4) * (opts.max - opts.min);
-    const y   = pad.t + (g / 4) * ph;
-    ctx.fillText(opts.fmt ? opts.fmt(v) : Math.round(v), pad.l - 4, y + 3);
-  }
-
-  // X-axis labels
-  ctx.textAlign = 'center';
-  const tickCount = Math.min(10, Math.floor(tMax / 10));
-  for (let i = 0; i <= tickCount; i++) {
-    const t = (i / tickCount) * tMax;
-    const x = pad.l + (t / tMax) * pw;
-    const mins = Math.floor(t / 60);
-    const secs = Math.floor(t % 60);
-    ctx.fillText(`${mins}:${String(secs).padStart(2,'0')}`, x, H - 8);
-  }
-
-  // Chart title
-  ctx.fillStyle = '#55558a';
-  ctx.font = '700 9px monospace';
-  ctx.textAlign = 'left';
-  ctx.fillText(opts.title.toUpperCase(), pad.l + 4, pad.t - 6);
-
-  // Series
-  for (const s of series) {
-    ctx.strokeStyle = s.color;
-    ctx.lineWidth   = 1.5;
-    ctx.lineJoin    = 'round';
-    ctx.beginPath();
-    let moved = false;
-    for (const pt of points) {
-      const x = pad.l + (pt.t / tMax) * pw;
-      const v = pt[s.key] ?? 0;
-      const clamped = Math.max(opts.min, Math.min(opts.max, v));
-      const y = pad.t + ph - ((clamped - opts.min) / (opts.max - opts.min)) * ph;
-      if (!moved) { ctx.moveTo(x, y); moved = true; }
-      else          ctx.lineTo(x, y);
-    }
-    ctx.stroke();
-
-    // Legend label
-    if (s.label) {
-      ctx.fillStyle = s.color;
-      ctx.font = '700 9px monospace';
-      ctx.textAlign = 'right';
-      // stack legend entries right side
-      ctx.fillText(s.label, W - pad.r - (series.indexOf(s) * 60), pad.t - 6);
-    }
-  }
-
-  // Border
-  ctx.strokeStyle = '#1a1a38';
-  ctx.lineWidth = 0.8;
-  ctx.strokeRect(pad.l, pad.t, pw, ph);
-}
-
-function drawAnalysisCharts() {
-  drawAnalysisChart('ac-inputs', [
-    { key: 'thr', color: '#28cc88', label: 'THROTTLE' },
-    { key: 'brk', color: '#e03838', label: 'BRAKE' },
-    { key: 'clt', color: '#e8a020', label: 'CLUTCH' },
-  ], { min: 0, max: 100, title: 'Driver Inputs (%)', fmt: v => v + '%' });
-
-  // RPM scaled to 0-400 range (divide by ~maxRpm/400) to overlay with speed
-  drawAnalysisChart('ac-speed', [
-    { key: 'spd',     color: '#00c8f0', label: 'SPEED' },
-    { key: '_rpmscl', color: '#8c3dc8', label: 'RPM%' },
-  ], {
-    min: 0, max: 100, title: 'Speed (km/h scaled) & RPM%',
-    fmt: v => Math.round(v),
-    preprocess: pts => pts.map(p => ({
-      ...p,
-      spd: p.spd / 4,
-      _rpmscl: p.mrpm > 0 ? p.rpm / p.mrpm * 100 : p.rpm / 85,
-    })),
-  });
-
-  drawAnalysisChart('ac-gforce', [
-    { key: 'gL', color: '#00c8f0', label: 'LAT-G' },
-    { key: 'gN', color: '#e8a020', label: 'LON-G' },
-  ], { min: -3, max: 3, title: 'G-Forces (g)', fmt: v => v.toFixed(1) });
-}
-
-// Cursor overlay across all analysis charts
-(function initAnalysisCursor() {
-  const CHARTS = ['ac-inputs', 'ac-speed', 'ac-gforce'];
-  const cursorBar = document.getElementById('analysis-cursor-bar');
-  const label     = document.getElementById('analysis-cursor-label');
-
-  function onMove(e) {
-    if (!_analysisPoints.length) return;
-    const canvas = e.currentTarget;
-    const rect   = canvas.getBoundingClientRect();
-    const x      = e.clientX - rect.left;
-    const W      = canvas.width;
-    const padL   = 50, padR = 16;
-    const pw     = W - padL - padR;
-    if (x < padL || x > padL + pw) { if (cursorBar) cursorBar.style.display = 'none'; return; }
-
-    const tMax  = _analysisPoints[_analysisPoints.length - 1].t || 1;
-    const t     = ((x - padL) / pw) * tMax;
-    const idx   = _analysisPoints.findIndex(p => p.t >= t);
-    const pt    = _analysisPoints[Math.max(0, idx)];
-
-    if (label) {
-      const mins = Math.floor(t / 60);
-      const secs = (t % 60).toFixed(1);
-      label.textContent = `T ${mins}:${String(Math.floor(t % 60)).padStart(2,'0')}  `
-        + `THR ${pt.thr.toFixed(0)}%  BRK ${pt.brk.toFixed(0)}%  `
-        + `${pt.spd.toFixed(0)} km/h  ${Math.round(pt.rpm)} RPM  `
-        + `gLat ${pt.gL.toFixed(2)}  gLon ${pt.gN.toFixed(2)}`;
-      label.style.display = 'inline';
-    }
-
-    if (cursorBar) {
-      cursorBar.style.display = 'block';
-      cursorBar.style.left    = e.clientX + 'px';
-      // span all chart canvases vertically
-      const first = document.getElementById(CHARTS[0]);
-      const last  = document.getElementById(CHARTS[CHARTS.length - 1]);
-      if (first && last) {
-        const topR = first.getBoundingClientRect();
-        const botR = last.getBoundingClientRect();
-        cursorBar.style.top    = topR.top + 'px';
-        cursorBar.style.height = (botR.bottom - topR.top) + 'px';
-      }
-    }
-  }
-
-  function onLeave() {
-    if (cursorBar) cursorBar.style.display = 'none';
-    if (label)     label.style.display = 'none';
-  }
-
-  CHARTS.forEach(id => {
-    const c = document.getElementById(id);
-    if (c) { c.addEventListener('mousemove', onMove); c.addEventListener('mouseleave', onLeave); }
-  });
-})();
 
 // ══════════════════════════════════════════════════════════════════════════════
 // Boot
 // ══════════════════════════════════════════════════════════════════════════════
-document.getElementById('filter-input').addEventListener('input', renderSessionList);
-document.getElementById('grafana-link').href = `http://${window.location.hostname}:3000`;
+$('#filter-input').addEventListener('input', renderSessionList);
+
+let _resizeTimer = null;
+window.addEventListener('resize', () => {
+  clearTimeout(_resizeTimer);
+  // uPlot needs an explicit width, so charts are rebuilt rather than reflowed.
+  _resizeTimer = setTimeout(() => {
+    if ($('#tab-analysis').classList.contains('active')) redrawAll();
+  }, 180);
+});
 
 async function init() {
   await loadCarNames();
   try {
-    const res  = await fetch('/api/sessions');
-    allSessions = await res.json();
+    state.groups = await (await fetch('/api/groups')).json();
+  } catch { state.groups = { groups: [], renames: {} }; }
+
+  try {
+    state.allSessions = await (await fetch('/api/sessions')).json();
+    for (const s of state.allSessions) state.sessionsById[s.session_id] = s;
     buildClassPills();
     renderSessionList();
   } catch {
-    document.getElementById('session-list').innerHTML =
+    $('#session-list').innerHTML =
       '<div style="padding:30px;text-align:center;color:var(--red);font-size:0.8rem">Failed to load sessions</div>';
   }
   initMapObserver();
+  renderTray();
 }
 
 init();

@@ -32,6 +32,37 @@ INFLUX_ORG    = os.environ.get("INFLUXDB_ORG",    "pitlane")
 INFLUX_BUCKET = os.environ.get("INFLUXDB_BUCKET", "forza")
 RELAY_FILE    = os.environ.get("RELAY_FILE", "/relay/latest.json")
 LAYOUT_FILE   = os.environ.get("LAYOUT_FILE", "/data/layout.json")
+GROUPS_FILE   = os.environ.get("GROUPS_FILE", "/data/groups.json")
+
+# Channels the analysis charts always need.
+ANALYSIS_CORE_FIELDS = [
+    "speed_kmh", "throttle_pct", "brake_pct", "steer_norm",
+    "current_lap_time", "distance_traveled",
+    "tire_combined_slip_fl", "tire_combined_slip_fr",
+    "tire_combined_slip_rl", "tire_combined_slip_rr",
+    "pos_x", "pos_y", "pos_z",
+]
+
+# Extra channels for the raw-data-at-cursor table. Opt-in (raw=1) because
+# pivoting this many fields over six laps is markedly slower.
+ANALYSIS_RAW_FIELDS = [
+    "engine_rpm", "engine_max_rpm", "torque_nm", "power_w", "boost", "fuel",
+    "gear", "race_position", "current_race_time",
+    "accel_x", "accel_y", "accel_z",
+    "vel_x", "vel_y", "vel_z",
+    "yaw", "pitch", "roll",
+    "g_lateral", "g_longitudinal", "g_vertical",
+    "norm_susp_fl", "norm_susp_fr", "norm_susp_rl", "norm_susp_rr",
+    "susp_travel_m_fl", "susp_travel_m_fr", "susp_travel_m_rl", "susp_travel_m_rr",
+    "tire_slip_ratio_fl", "tire_slip_ratio_fr", "tire_slip_ratio_rl", "tire_slip_ratio_rr",
+    "tire_slip_angle_fl", "tire_slip_angle_fr", "tire_slip_angle_rl", "tire_slip_angle_rr",
+    "tire_temp_fl", "tire_temp_fr", "tire_temp_rl", "tire_temp_rr",
+    "wheel_rot_speed_fl", "wheel_rot_speed_fr", "wheel_rot_speed_rl", "wheel_rot_speed_rr",
+    "clutch_input", "handbrake_input",
+]
+
+MAX_PICKS       = 6      # matches the A–F tray in the UI
+ANALYSIS_POINTS = 600    # resample resolution per lap
 
 STALE_SECS = 5.0
 
@@ -414,81 +445,173 @@ from(bucket: "{INFLUX_BUCKET}")
         return JSONResponse({"points": [], "contacts": [], "jumps": [], "bounds": {}, "laps": []})
 
 
-@app.get("/api/sessions/{session_id}/compare")
-async def session_compare(session_id: str, laps: str = ""):
-    """Return distance-aligned telemetry for lap comparison (up to 5 laps)."""
-    if not laps:
-        return JSONResponse([])
+def _resample(dists: list, channels: dict, n: int) -> tuple[list, dict]:
+    """Resample every channel onto an evenly-spaced distance axis in one pass.
 
-    try:
-        lap_numbers = [int(x.strip()) for x in laps.split(",") if x.strip()]
-    except ValueError:
-        return JSONResponse([])
+    _lerp does a binary search per call; with ~12 channels x 600 points x 6 laps
+    that is ~43k searches. Walking the source array once instead keeps the whole
+    resample O(len(dists) + n) per channel.
+    """
+    if not dists:
+        return [], {k: [] for k in channels}
+    span = dists[-1] - dists[0]
+    if span <= 0:
+        return [0.0], {k: [v[0] if v else 0.0] for k, v in channels.items()}
 
-    lap_numbers = lap_numbers[:5]
+    xq = [dists[0] + span * i / (n - 1) for i in range(n)]
+    out = {k: [0.0] * n for k in channels}
+    i = 0
+    last = len(dists) - 1
+    for k_idx, x in enumerate(xq):
+        while i < last - 1 and dists[i + 1] < x:
+            i += 1
+        if x <= dists[0]:
+            for name, ys in channels.items():
+                out[name][k_idx] = ys[0]
+        elif x >= dists[last]:
+            for name, ys in channels.items():
+                out[name][k_idx] = ys[last]
+        else:
+            gap = dists[i + 1] - dists[i]
+            # gap == 0 on parked frames; 0/0 would put a NaN hole in the chart
+            t = (x - dists[i]) / gap if gap > 0 else 0.0
+            for name, ys in channels.items():
+                out[name][k_idx] = ys[i] + (ys[i + 1] - ys[i]) * t
+    return [round(x - xq[0], 2) for x in xq], out
 
-    def _fetch():
-        fields = [
-            "speed_kmh", "throttle_pct", "brake_pct", "steer_norm",
-            "distance_traveled", "lap_number", "pos_x", "pos_z", "pos_y",
-        ]
-        field_filter = " or ".join(f'r._field == "{f}"' for f in fields)
-        results = []
 
-        for lap in lap_numbers:
-            flux = f"""
+def _lap_series(session_id: str, lap: int, want_raw: bool) -> dict | None:
+    """Fetch one lap as distance-aligned columnar arrays (uPlot consumes these directly)."""
+    fields = list(ANALYSIS_CORE_FIELDS)
+    if want_raw:
+        fields += ANALYSIS_RAW_FIELDS
+    field_filter = " or ".join(f'r._field == "{f}"' for f in fields)
+
+    flux = f"""
 from(bucket: "{INFLUX_BUCKET}")
   |> range(start: -365d)
   |> filter(fn: (r) => r._measurement == "telemetry")
   |> filter(fn: (r) => r.session_id == "{session_id}")
   |> filter(fn: (r) => {field_filter})
   |> pivot(rowKey: ["_time"], columnKey: ["_field"], valueColumn: "_value")
-  |> filter(fn: (r) => r.lap_number == {lap} and exists r.pos_x and exists r.distance_traveled)
+  |> filter(fn: (r) => r.lap_number == {lap} and exists r.distance_traveled)
   |> sort(columns: ["_time"])
 """
-            rows = _query(flux)
-            if not rows:
+    rows = _query(flux)
+    if not rows:
+        return None
+
+    wanted = [f for f in fields if f != "distance_traveled"]
+    dists: list[float] = []
+    cols: dict[str, list] = {f: [] for f in wanted}
+    for row in rows:
+        d = row.get("distance_traveled")
+        if d is None:
+            continue
+        dists.append(float(d))
+        for f in wanted:
+            v = row.get(f)
+            cols[f].append(float(v) if v is not None else 0.0)
+    if len(dists) < 2:
+        return None
+
+    axis, res = _resample(dists, cols, ANALYSIS_POINTS)
+
+    # current_lap_time is elapsed-seconds-within-lap; rebase so every lap starts
+    # at 0 even when the first sample landed slightly after the line.
+    lt = res.get("current_lap_time") or []
+    if lt:
+        base = lt[0]
+        lt = [round(v - base, 3) for v in lt]
+
+    slip_f = [round((a + b) / 2, 3) for a, b in
+              zip(res["tire_combined_slip_fl"], res["tire_combined_slip_fr"])]
+    slip_r = [round((a + b) / 2, 3) for a, b in
+              zip(res["tire_combined_slip_rl"], res["tire_combined_slip_rr"])]
+
+    ch = {
+        "speed":      [round(v, 1) for v in res["speed_kmh"]],
+        "thr":        [round(v, 1) for v in res["throttle_pct"]],
+        "brk":        [round(v, 1) for v in res["brake_pct"]],
+        "str":        [round(v * 100, 1) for v in res["steer_norm"]],   # to %
+        "lap_time":   lt,
+        "slip_front": slip_f,
+        "slip_rear":  slip_r,
+        "x":          [round(v, 1) for v in res["pos_x"]],
+        "y":          [round(v, 1) for v in res["pos_y"]],
+        "z":          [round(v, 1) for v in res["pos_z"]],
+    }
+
+    out = {
+        "key":        f"{session_id}:{lap}",
+        "session_id": session_id,
+        "lap":        lap,
+        "n":          len(axis),
+        "max_dist":   axis[-1] if axis else 0.0,
+        "lap_time":   lt[-1] if lt else 0.0,
+        "dist":       axis,
+        "ch":         ch,
+    }
+    if want_raw:
+        out["raw"] = {f: [round(v, 3) for v in res[f]] for f in ANALYSIS_RAW_FIELDS if f in res}
+    return out
+
+
+@app.get("/api/analysis/laps")
+async def analysis_laps(picks: str = "", raw: int = 0):
+    """Distance-aligned telemetry for up to six laps, each addressed as session:lap.
+
+    Picks may span sessions, which is what lets the UI overlay today's lap
+    against one from a previous run.
+    """
+    if not picks:
+        return JSONResponse([])
+
+    parsed: list[tuple[str, int]] = []
+    for token in picks.split(","):
+        token = token.strip()
+        if not token or ":" not in token:
+            continue
+        sid, _, lap_s = token.rpartition(":")
+        try:
+            parsed.append((sid, int(lap_s)))
+        except ValueError:
+            continue
+    parsed = parsed[:MAX_PICKS]
+    if not parsed:
+        return JSONResponse([])
+
+    def _fetch():
+        out = []
+        for sid, lap in parsed:
+            try:
+                series = _lap_series(sid, lap, bool(raw))
+            except Exception as exc:
+                log.warning("Lap series %s:%s failed: %s", sid, lap, exc)
                 continue
-
-            dists, speeds, thrs, brks, strs = [], [], [], [], []
-            for row in rows:
-                d = row.get("distance_traveled")
-                if d is None:
-                    continue
-                dists.append(float(d))
-                speeds.append(float(row.get("speed_kmh") or 0))
-                thrs.append(float(row.get("throttle_pct") or 0))
-                brks.append(float(row.get("brake_pct") or 0))
-                strs.append(float(row.get("steer_norm") or 0))
-
-            if not dists:
-                continue
-
-            start_d = min(dists)
-            dists = [d - start_d for d in dists]
-            max_d = max(dists) or 1.0
-
-            N = 300
-            data = []
-            for i in range(N):
-                sd = i * max_d / (N - 1) if N > 1 else 0.0
-                data.append({
-                    "d":   round(sd, 1),
-                    "spd": round(_lerp(dists, speeds, sd), 1),
-                    "thr": round(_lerp(dists, thrs, sd), 1),
-                    "brk": round(_lerp(dists, brks, sd), 1),
-                    "str": round(_lerp(dists, strs, sd), 3),
-                })
-
-            results.append({"lap": lap, "max_dist": round(max_d, 1), "data": data})
-
-        return results
+            if series:
+                out.append(series)
+        return out
 
     try:
         return JSONResponse(await run_in_threadpool(_fetch))
     except Exception as exc:
-        log.warning("Compare query failed: %s", exc)
+        log.warning("Analysis laps query failed: %s", exc)
         return JSONResponse([])
+
+
+@app.get("/api/sessions/{session_id}/compare")
+async def session_compare(session_id: str, laps: str = "", raw: int = 0):
+    """Single-session convenience wrapper over /api/analysis/laps."""
+    try:
+        nums = [int(x.strip()) for x in laps.split(",") if x.strip()][:MAX_PICKS]
+    except ValueError:
+        return JSONResponse([])
+    if not nums:
+        return JSONResponse([])
+    return await analysis_laps(
+        picks=",".join(f"{session_id}:{n}" for n in nums), raw=raw
+    )
 
 
 @app.get("/api/version")
@@ -532,6 +655,57 @@ async def save_layout(request: Request):
         await run_in_threadpool(_write)
     except OSError as exc:
         log.warning("Layout save failed: %s", exc)
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=500)
+    return JSONResponse({"ok": True})
+
+
+# ── Session grouping / renaming ───────────────────────────────────────────────
+# InfluxDB points are effectively immutable, so user-authored session metadata
+# (custom names, merge groups) lives in a side file keyed by session_id.
+
+def _read_groups() -> dict:
+    try:
+        with open(GROUPS_FILE) as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        return {"groups": [], "renames": {}}
+    if not isinstance(data, dict):
+        return {"groups": [], "renames": {}}
+    data.setdefault("groups", [])
+    data.setdefault("renames", {})
+    return data
+
+
+@app.get("/api/groups")
+async def get_groups():
+    return JSONResponse(await run_in_threadpool(_read_groups))
+
+
+@app.post("/api/groups")
+async def save_groups(request: Request):
+    try:
+        data = await request.json()
+    except ValueError:
+        return JSONResponse({"ok": False, "error": "invalid JSON"}, status_code=400)
+    if not isinstance(data, dict):
+        return JSONResponse({"ok": False, "error": "expected an object"}, status_code=400)
+
+    payload = {
+        "groups":  data.get("groups")  or [],
+        "renames": data.get("renames") or {},
+    }
+
+    def _write():
+        os.makedirs(os.path.dirname(GROUPS_FILE), exist_ok=True)
+        tmp = GROUPS_FILE + ".tmp"
+        with open(tmp, "w") as f:
+            json.dump(payload, f)
+        os.replace(tmp, GROUPS_FILE)
+
+    try:
+        await run_in_threadpool(_write)
+    except OSError as exc:
+        log.warning("Groups save failed: %s", exc)
         return JSONResponse({"ok": False, "error": str(exc)}, status_code=500)
     return JSONResponse({"ok": True})
 

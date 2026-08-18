@@ -66,6 +66,7 @@ services:
       INFLUXDB_BUCKET: ${INFLUXDB_BUCKET}
       RELAY_FILE: /relay/latest.json
       LAYOUT_FILE: /data/layout.json
+      GROUPS_FILE: /data/groups.json
     volumes:
       - relay_data:/relay
       - dashboard_data:/data   # persistent — relay_data is tmpfs and would lose the layout
