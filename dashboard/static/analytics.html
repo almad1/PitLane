@@ -215,7 +215,8 @@ td { padding: 6px 10px; vertical-align: middle; white-space: nowrap; }
 
 /* Analysis map */
 #amap-wrap { position: relative; height: 300px; background: var(--bg); }
-#amap { display: block; width: 100%; height: 100%; cursor: crosshair; }
+#amap { display: block; width: 100%; height: 100%; cursor: grab; touch-action: none; }
+#track-canvas { cursor: grab; touch-action: none; }
 #amap-hint { position: absolute; left: 10px; bottom: 8px; font: 0.6rem var(--font-mono);
   color: var(--muted); pointer-events: none; }
 select.mini, button.mini { background: var(--bg); border: 1px solid var(--border2);
@@ -420,6 +421,13 @@ button.mini:hover { border-color: var(--accent); color: var(--accent); }
           </div>
           <div class="map-event-key"><span class="evdot"></span> Contact</div>
           <div class="map-event-key"><span class="evline"></span> Jump</div>
+          <label id="elev-ctl" style="display:none;align-items:center;gap:6px;font-size:0.65rem;color:var(--text-dim)">
+            Elevation
+            <input type="range" id="elev-slider" min="0" max="4" step="0.1" value="1"
+                   oninput="setElev(this.value)" style="width:88px;accent-color:var(--accent)">
+          </label>
+          <button class="mini" onclick="resetView(trackView, drawCurrentMap)">Reset view</button>
+          <span id="map-hint" style="font-size:0.62rem;color:var(--muted)"></span>
         </div>
         <div id="map-canvas-wrap">
           <canvas id="track-canvas"></canvas>
@@ -527,6 +535,76 @@ const state = {
 
 // track map (Track Map tab)
 let trackData = null, mapLap = null, mapView = '2d', _mapObserver = null;
+
+// ── Map viewports ─────────────────────────────────────────────────────────────
+// Sits on top of the fit-to-canvas projection, shared by 2D and 3D: wheel zooms
+// about the cursor, dragging pans (and rotates in 3D). zoom 1 / pan 0 is the
+// classic full-fit frame. `elev` scales the auto elevation exaggeration.
+const DEFAULT_YAW = -0.9;
+const trackView    = { zoom: 1, panX: 0, panY: 0, yaw: DEFAULT_YAW, elev: 1 };
+const analysisView = { zoom: 1, panX: 0, panY: 0 };
+
+function resetView(v, redraw) {
+  v.zoom = 1; v.panX = 0; v.panY = 0;
+  if ('yaw' in v) v.yaw = DEFAULT_YAW;
+  if (redraw) redraw();
+}
+
+function applyView(cx, cy, W, H, v) {
+  return {
+    cx: (cx - W / 2) * v.zoom + W / 2 + v.panX,
+    cy: (cy - H / 2) * v.zoom + H / 2 + v.panY,
+  };
+}
+
+function zoomAt(v, mx, my, W, H, factor) {
+  const z0 = v.zoom;
+  const z1 = Math.max(0.4, Math.min(24, z0 * factor));
+  if (z1 === z0) return;
+  // Keep whatever is under the cursor pinned there while the scale changes.
+  const ux = mx - W / 2, uy = my - H / 2;
+  v.panX = ux - (ux - v.panX) * (z1 / z0);
+  v.panY = uy - (uy - v.panY) * (z1 / z0);
+  v.zoom = z1;
+}
+
+function bindMapInteraction(canvas, view, redraw, opts = {}) {
+  let drag = null;
+
+  canvas.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    const r = canvas.getBoundingClientRect();
+    zoomAt(view, e.clientX - r.left, e.clientY - r.top, r.width, r.height,
+           e.deltaY < 0 ? 1.15 : 1 / 1.15);
+    redraw();
+  }, { passive: false });
+
+  canvas.addEventListener('pointerdown', (e) => {
+    canvas.setPointerCapture(e.pointerId);
+    // In 3D a plain drag orbits; hold Shift to pan instead. 2D always pans.
+    drag = { x: e.clientX, y: e.clientY, rotate: !!opts.canRotate && !e.shiftKey && mapView === '3d' };
+    canvas.style.cursor = 'grabbing';
+  });
+
+  canvas.addEventListener('pointermove', (e) => {
+    if (!drag) return;
+    const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+    drag.x = e.clientX; drag.y = e.clientY;
+    if (drag.rotate) view.yaw += dx * 0.008;
+    else { view.panX += dx; view.panY += dy; }
+    redraw();
+  });
+
+  const end = () => { drag = null; canvas.style.cursor = ''; };
+  canvas.addEventListener('pointerup', end);
+  canvas.addEventListener('pointercancel', end);
+  canvas.addEventListener('dblclick', () => resetView(view, redraw));
+}
+
+function setElev(v) {
+  trackView.elev = parseFloat(v);
+  drawCurrentMap();
+}
 
 const refPick    = () => (state.picks[0] && state.picks[0].data ? state.picks[0] : null);
 const pickLetter = (p) => String.fromCharCode(65 + state.picks.indexOf(p));
@@ -1082,7 +1160,10 @@ function drawAnalysisMap() {
   const rx = (maxX - minX) || 1, rz = (maxZ - minZ) || 1;
   const scale = Math.min((W - PAD*2) / rx, (H - PAD*2) / rz);
   const offX = (W - rx * scale) / 2, offZ = (H - rz * scale) / 2;
-  const proj = (x, y, z) => [offX + (x - minX) * scale, offZ + (z - minZ) * scale];
+  const proj = (x, y, z) => {
+    const p = applyView(offX + (x - minX) * scale, offZ + (z - minZ) * scale, W, H, analysisView);
+    return [p.cx, p.cy];
+  };
   mapCursor.proj = proj;
 
   ctx.fillStyle = cssVar('--bg') || '#07070e';
@@ -1126,7 +1207,9 @@ function drawAnalysisMap() {
 
   $('#amap-hint').textContent = zoom
     ? 'zoomed to chart selection — double-click a chart to reset'
-    : (picks.length > 1 ? 'dot spread = racing-line difference at the cursor' : '');
+    : (picks.length > 1
+        ? 'dot spread = racing-line difference · drag to pan · scroll to zoom'
+        : 'drag to pan · scroll to zoom · double-click to reset');
 
   // Cache the finished frame so hover only blits + paints the marker.
   const snap = document.createElement('canvas');
@@ -1339,6 +1422,10 @@ function setMapView(mode) {
   mapView = mode;
   $('#btn2d').classList.toggle('active', mode === '2d');
   $('#btn3d').classList.toggle('active', mode === '3d');
+  $('#elev-ctl').style.display = mode === '3d' ? 'flex' : 'none';
+  $('#map-hint').textContent = mode === '3d'
+    ? 'drag to orbit · shift-drag to pan · scroll to zoom · double-click to reset'
+    : 'drag to pan · scroll to zoom · double-click to reset';
   drawCurrentMap();
 }
 
@@ -1395,7 +1482,8 @@ function draw2DMap(ctx, W, H, pts, contacts, jumps, speedColor) {
   const rangeX = maxX - minX || 1, rangeZ = maxZ - minZ || 1;
   const scale = Math.min((W - pad*2) / rangeX, (H - pad*2) / rangeZ);
   const offX = (W - rangeX * scale) / 2, offZ = (H - rangeZ * scale) / 2;
-  const project = (x, z) => ({ cx: offX + (x - minX) * scale, cy: offZ + (z - minZ) * scale });
+  const project = (x, z) => applyView(
+    offX + (x - minX) * scale, offZ + (z - minZ) * scale, W, H, trackView);
 
   ctx.fillStyle = cssVar('--bg') || '#07070e';
   ctx.fillRect(0, 0, W, H);
@@ -1435,13 +1523,17 @@ function draw3DMap(ctx, W, H, pts, contacts, jumps, bounds, speedColor) {
   const cX = (bounds.minX + bounds.maxX) / 2, cZ = (bounds.minZ + bounds.maxZ) / 2;
   const rangeXZ = Math.max(bounds.maxX - bounds.minX, bounds.maxZ - bounds.minZ) || 1;
   const SQRT2 = 1.41421356;
-  const elevExag = Math.min(0.5, (bounds.maxY - bounds.minY) / rangeXZ * 4);
+  const elevExag = Math.min(0.5, (bounds.maxY - bounds.minY) / rangeXZ * 4) * trackView.elev;
+  const cosY = Math.cos(trackView.yaw), sinY = Math.sin(trackView.yaw);
   const project3D = (x, y, z) => {
     const nx = (x - cX) / rangeXZ, nz = (z - cZ) / rangeXZ, ny = (y - bounds.minY) / rangeXZ;
-    const isoX = (nx - nz) / SQRT2;
-    const isoY = (nx + nz) / (2 * SQRT2) - ny * elevExag;
+    // Orbit about the vertical axis before the fixed axonometric projection.
+    const rx = nx * cosY - nz * sinY;
+    const rz = nx * sinY + nz * cosY;
+    const isoX = (rx - rz) / SQRT2;
+    const isoY = (rx + rz) / (2 * SQRT2) - ny * elevExag;
     const scale = Math.min(W, H) * 0.42;
-    return { cx: W/2 + isoX * scale, cy: H/2 + isoY * scale };
+    return applyView(W/2 + isoX * scale, H/2 + isoY * scale, W, H, trackView);
   };
   ctx.fillStyle = cssVar('--bg') || '#07070e';
   ctx.fillRect(0, 0, W, H);
@@ -1491,6 +1583,10 @@ function initMapObserver() {
   });
   _mapObserver.observe($('#map-canvas-wrap'));
   _mapObserver.observe($('#amap-wrap'));
+
+  bindMapInteraction($('#track-canvas'), trackView, drawCurrentMap, { canRotate: true });
+  bindMapInteraction($('#amap'), analysisView, drawAnalysisMap);
+  $('#map-hint').textContent = 'drag to pan · scroll to zoom · double-click to reset';
 }
 
 // ══════════════════════════════════════════════════════════════════════════════

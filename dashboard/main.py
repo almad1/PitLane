@@ -800,4 +800,24 @@ async def laps(limit: int = 20):
         return JSONResponse([])
 
 # ── Static ─────────────────────────────────────────────────────────────────────
-app.mount("/", StaticFiles(directory="static", html=True), name="static")
+
+class RevalidatingStatics(StaticFiles):
+    """Force browsers to revalidate the page shells on every load.
+
+    Without an explicit Cache-Control, a browser applies *heuristic* freshness
+    (roughly 10% of the file's age) and will serve index/analytics from cache
+    without ever asking us — so a redeploy appears to change nothing until the
+    user happens to hard-refresh. ETag is already sent, so revalidation costs
+    one 304 with an empty body. Vendored assets keep caching normally; they are
+    immutable in practice and are the bulk of the bytes.
+    """
+
+    def file_response(self, *args, **kwargs):
+        response = super().file_response(*args, **kwargs)
+        path = str(args[0]) if args else ""
+        if path.endswith((".html", ".json")):
+            response.headers["Cache-Control"] = "no-cache, must-revalidate"
+        return response
+
+
+app.mount("/", RevalidatingStatics(directory="static", html=True), name="static")
