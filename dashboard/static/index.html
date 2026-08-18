@@ -253,7 +253,7 @@ body {
 
 /* Friction circle */
 .ck-friction { flex: 0 0 auto; align-items: center; }
-#gforce-svg { width: 100%; max-width: 155px; }
+#gforce-svg { width: 100%; max-width: 155px; aspect-ratio: 1; overflow: hidden; display: block; }
 .ck-g-vals { font: 0.65rem var(--font-mono); color: var(--muted); text-align: center; }
 
 /* Tire grip */
@@ -507,7 +507,7 @@ body {
           <span class="ck-hdr-dash">—</span>
           FRICTION CIRCLE
         </div>
-        <svg id="gforce-svg" viewBox="0 0 180 180" xmlns="http://www.w3.org/2000/svg">
+        <svg id="gforce-svg" viewBox="0 0 180 180" xmlns="http://www.w3.org/2000/svg" overflow="hidden">
           <circle class="g-ring" cx="90" cy="90" r="65"/>
           <circle class="g-ring-1g" cx="90" cy="90" r="44"/>
           <circle class="g-ring" cx="90" cy="90" r="22"/>
