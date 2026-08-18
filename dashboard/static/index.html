@@ -158,6 +158,9 @@ body {
 .bar-brk { background: var(--red); }
 .bar-boost { background: var(--orange); }
 .bar-fuel  { background: var(--primary); }
+.bar-steer-wrap { flex: 1; height: 12px; background: var(--surface2); border-radius: 2px; position: relative; overflow: hidden; }
+.bar-steer { position: absolute; top: 0; height: 100%; background: var(--cyan); border-radius: 2px; transition: left 0.08s, width 0.08s; }
+.bar-steer-center { position: absolute; left: calc(50% - 0.5px); top: 0; width: 1px; height: 100%; background: rgba(255,255,255,0.18); pointer-events: none; }
 .input-pct { font: 0.6rem var(--font-mono); color: var(--muted); width: 36px; text-align: right; }
 
 /* ── G-force ──────────────────────────────────────────────────────────────── */
@@ -426,6 +429,14 @@ body {
         <span class="input-pct" id="pct-brk">0%</span>
       </div>
       <div class="input-row">
+        <span class="input-lbl">STR</span>
+        <div class="bar-steer-wrap">
+          <div id="bar-steer" class="bar-steer"></div>
+          <div class="bar-steer-center"></div>
+        </div>
+        <span class="input-pct" id="pct-steer">0%</span>
+      </div>
+      <div class="input-row">
         <span class="input-lbl">BST</span>
         <div class="input-bar-wrap"><div id="bar-boost" class="input-bar bar-boost"></div></div>
         <span class="input-pct" id="pct-boost">0 psi</span>
@@ -648,6 +659,7 @@ const EMA = {
   gLon:    { v: 0, a: 0.30 },
   thr:     { v: 0, a: 0.55 },
   brk:     { v: 0, a: 0.55 },
+  steer:   { v: 0, a: 0.45 },
   boost:   { v: 0, a: 0.40 },
   slipFL:  { v: 0, a: 0.28 },
   slipFR:  { v: 0, a: 0.28 },
@@ -896,7 +908,7 @@ function updateGForce(gLat, gLon) {
 }
 
 // ── Inputs ─────────────────────────────────────────────────────────────────────
-function updateInputs(thr, brk, boost, fuel) {
+function updateInputs(thr, brk, boost, fuel, steer) {
   for (const [k,v] of [['thr',thr],['brk',brk]]) {
     const pct = clamp(v, 0, 100);
     document.getElementById(`bar-${k}`).style.width = `${pct}%`;
@@ -908,6 +920,19 @@ function updateInputs(thr, brk, boost, fuel) {
   const fuelPct = clamp(fuel * 100, 0, 100);
   document.getElementById('bar-fuel').style.width = `${fuelPct}%`;
   document.getElementById('pct-fuel').textContent = `${Math.round(fuelPct)}%`;
+
+  const s = clamp(steer ?? 0, -1, 1);
+  const steerBar = document.getElementById('bar-steer');
+  if (steerBar) {
+    const halfPct = Math.abs(s) * 50;
+    steerBar.style.left  = s >= 0 ? '50%' : (50 + s * 50) + '%';
+    steerBar.style.width = halfPct + '%';
+  }
+  const steerLbl = document.getElementById('pct-steer');
+  if (steerLbl) {
+    const pct = Math.round(Math.abs(s) * 100);
+    steerLbl.textContent = pct < 1 ? '0%' : (s > 0 ? 'R' : 'L') + pct + '%';
+  }
 }
 
 // ── Tire Grip (cockpit) ────────────────────────────────────────────────────────
@@ -1336,6 +1361,7 @@ function applyTelemetry(d) {
     smooth('brk',   d.brake_pct    ?? 0),
     smooth('boost', d.boost        ?? 0),
     d.fuel ?? 1,
+    smooth('steer', d.steer        ?? 0),
   );
 
   // Tire grip (cockpit)
