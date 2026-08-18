@@ -967,11 +967,18 @@ function scheduleSave() {
 
 function saveLayout() {
   if (!grid) return;
-  const nodes = grid.save(false);   // false = positions only, no innerHTML
-  const payload = {
-    layout: nodes.filter(n => n.id).map(n => ({ id: n.id, x: n.x, y: n.y, w: n.w, h: n.h })),
-    hidden: [...hiddenWidgets],
-  };
+  // Read positions from each live gridstackNode rather than grid.save():
+  // save() deletes w/h from any node sitting at its minimum size
+  // (removeInternalForSave: `if (n.w === n.minW) delete n.w`), so tiles the
+  // user had shrunk to minimum serialized without sizes and collapsed on the
+  // next page load. gridstackNode always carries concrete numbers.
+  const layout = [];
+  for (const w of WIDGETS) {
+    const el = document.querySelector(`[gs-id="${w.id}"]`);
+    const n  = el && el.gridstackNode;
+    if (n) layout.push({ id: w.id, x: n.x ?? 0, y: n.y ?? 0, w: n.w ?? 1, h: n.h ?? 1 });
+  }
+  const payload = { layout, hidden: [...hiddenWidgets] };
   try { localStorage.setItem(LAYOUT_KEY, JSON.stringify(payload)); } catch (_) {}
   fetch('/api/layout', {
     method: 'POST',
@@ -1004,11 +1011,20 @@ function applyLayout(data) {
       if (!el.gridstackNode) grid.makeWidget(el);
     }
   }
+  // Any field missing or non-numeric (layouts saved by the old grid.save()
+  // path lost w/h for minimum-size tiles) falls back to the markup default,
+  // and the next save rewrites the stored copy with concrete numbers.
+  const defaults = Object.fromEntries(DEFAULT_LAYOUT.map(d => [d.id, d]));
+  const num = (v, fb) => (Number.isFinite(v) ? v : fb);
   for (const item of data.layout) {
     if (hiddenWidgets.has(item.id)) continue;
-    const el = document.querySelector(`[gs-id="${item.id}"]`);
-    if (el && el.gridstackNode) {
-      grid.update(el, { x: item.x, y: item.y, w: item.w, h: item.h });
+    const el  = document.querySelector(`[gs-id="${item.id}"]`);
+    const def = defaults[item.id];
+    if (el && el.gridstackNode && def) {
+      grid.update(el, {
+        x: num(item.x, def.x), y: num(item.y, def.y),
+        w: num(item.w, def.w), h: num(item.h, def.h),
+      });
     }
   }
   grid.commit();
