@@ -75,28 +75,20 @@ def _write_relay(packet, session_id: str, race_on: bool) -> None:
         "pos_x":  _sf(packet.pos_x)  if has_dash else 0.0,
         "pos_z":  _sf(packet.pos_z)  if has_dash else 0.0,
         "pos_y":  _sf(packet.pos_y)  if has_dash else 0.0,
-        "yaw":    _sf(packet.yaw),   # sled field, always present
-        # Tyre detail (suspension travel + lateral slip angle)
+        # Suspension (dashboard tyre-grip tile)
         "norm_susp_fl": _sf(packet.norm_susp_fl),
         "norm_susp_fr": _sf(packet.norm_susp_fr),
         "norm_susp_rl": _sf(packet.norm_susp_rl),
         "norm_susp_rr": _sf(packet.norm_susp_rr),
-        "tire_slip_angle_fl": _sf(packet.tire_slip_angle_fl),
-        "tire_slip_angle_fr": _sf(packet.tire_slip_angle_fr),
-        "tire_slip_angle_rl": _sf(packet.tire_slip_angle_rl),
-        "tire_slip_angle_rr": _sf(packet.tire_slip_angle_rr),
         # ── Extended fields ──────────────────────────────────────────────────────
+        # (yaw/pitch/roll, slip angles, race_time, clutch and handbrake were
+        # dropped from the relay: shipped at 30 Hz, rendered by nothing. They
+        # are still written to InfluxDB for the analysis raw table.)
         "race_position":      int(getattr(packet, "race_position",    0) or 0) if has_dash else 0,
-        "race_time":          _sf(packet.current_race_time)                    if has_dash else 0.0,
         "power_kw":           _sf(packet.power)  / 1000.0                      if has_dash else 0.0,
         "torque_nm":          _sf(packet.torque)                               if has_dash else 0.0,
         "distance_m":         _sf(packet.distance_traveled)                    if has_dash else 0.0,
         "steer":              _sf(packet.steer_norm)                           if has_dash else 0.0,
-        "clutch_pct":         _sf(packet.clutch_input) / 255.0 * 100.0        if has_dash else 0.0,
-        "handbrake":          1 if (getattr(packet, "handbrake_input", 0) or 0) > 10 else 0,
-        "pitch":              _sf(packet.pitch),
-        "roll":               _sf(packet.roll),
-        "ang_vel_y":          _sf(packet.ang_vel_y),
         "susp_mm_fl":         _sf(packet.susp_travel_m_fl) * 1000.0,
         "susp_mm_fr":         _sf(packet.susp_travel_m_fr) * 1000.0,
         "susp_mm_rl":         _sf(packet.susp_travel_m_rl) * 1000.0,
@@ -151,9 +143,13 @@ def main() -> None:
             session_id = tracker.process(packet, writer)
 
             if not packet.is_race_on:
+                # Relay only — the dashboard needs the race_on=0 heartbeat for
+                # its PAUSED badge. Writing these packets to InfluxDB tagged
+                # with the *previous* session_id appended thousands of junk
+                # points to the last race during a long menu idle, and no
+                # analysis query filters them out.
                 now = time.monotonic()
                 if now - last_menu_write >= 1.0:
-                    writer.write_telemetry(packet, session_id, race_on=False)
                     _write_relay(packet, session_id, race_on=False)
                     last_menu_write = now
                 continue

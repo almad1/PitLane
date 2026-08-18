@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          pip install -r dashboard/requirements.txt -r collector/requirements.txt
+          pip install pytest httpx
+
+      - name: Run tests
+        run: pytest -q
+
+      - name: Syntax-check frontend JS
+        run: |
+          for f in dashboard/static/index.html dashboard/static/analytics.html; do
+            python3 - "$f" <<'PY'
+          import re, subprocess, sys, tempfile
+          src = open(sys.argv[1]).read()
+          for i, block in enumerate(re.findall(r"<script>(.*?)</script>", src, re.S)):
+              with tempfile.NamedTemporaryFile("w", suffix=".js", delete=False) as f:
+                  f.write(block)
+              subprocess.run(["node", "--check", f.name], check=True)
+          print(f"{sys.argv[1]}: {i + 1} inline script block(s) OK")
+          PY
+          done

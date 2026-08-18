@@ -13,6 +13,7 @@ import json
 import logging
 import math
 import os
+import re
 import time
 from contextlib import asynccontextmanager
 from typing import Any
@@ -22,6 +23,7 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from influxdb_client import InfluxDBClient
+from starlette.datastructures import MutableHeaders
 
 log = logging.getLogger("dashboard")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s — %(message)s")
@@ -78,15 +80,24 @@ def _read_version() -> str:
 # ── In-memory live state ───────────────────────────────────────────────────────
 _telemetry: dict = {}
 _last_recv: float = 0.0
+# Serialized once per relay read, not once per SSE frame per client.
+_live_json: str = ""
+_STALE_JSON = json.dumps({"is_live": False})
+
+# Strong reference to the reader task. asyncio.create_task() alone keeps only a
+# weak reference in the loop, so without this the GC is free to destroy the
+# task mid-flight and the live dashboard silently freezes until a restart.
+_reader_task: asyncio.Task | None = None
 
 
 async def _relay_reader():
     """Poll the shared relay file at ~30 Hz and update in-memory state."""
-    global _telemetry, _last_recv
+    global _telemetry, _last_recv, _live_json
     while True:
         try:
             with open(RELAY_FILE) as f:
                 _telemetry = json.load(f)
+            _live_json = json.dumps({**_telemetry, "is_live": True})
             _last_recv = time.monotonic()
         except (FileNotFoundError, json.JSONDecodeError):
             pass
@@ -97,9 +108,11 @@ async def _relay_reader():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    asyncio.create_task(_relay_reader())
+    global _reader_task
+    _reader_task = asyncio.create_task(_relay_reader())
     log.info("Relay file reader started: %s", RELAY_FILE)
     yield
+    _reader_task.cancel()
 
 
 app = FastAPI(title="PitLane Dashboard", lifespan=lifespan)
@@ -114,8 +127,8 @@ async def live_stream(request: Request):
             if await request.is_disconnected():
                 break
             stale = (time.monotonic() - _last_recv) > STALE_SECS
-            payload = {"is_live": False} if stale else {**_telemetry, "is_live": True}
-            yield f"data: {json.dumps(payload)}\n\n"
+            payload = _STALE_JSON if (stale or not _live_json) else _live_json
+            yield f"data: {payload}\n\n"
             await asyncio.sleep(0.033)
 
     return StreamingResponse(
@@ -134,6 +147,16 @@ async def live_snapshot():
     return JSONResponse({**_telemetry, "is_live": True})
 
 # ── Lap history ────────────────────────────────────────────────────────────────
+
+# Session ids are uuid4[:8] (lowercase hex). The pattern is deliberately a bit
+# wider for future-proofing, but crucially admits no quote or backslash, so an
+# id can never break out of the Flux string literal it is interpolated into.
+_SESSION_ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+
+
+def _valid_sid(session_id: str) -> bool:
+    return bool(_SESSION_ID_RE.match(session_id))
+
 
 def _query(flux: str) -> list[dict[str, Any]]:
     with InfluxDBClient(url=INFLUX_URL, token=INFLUX_TOKEN, org=INFLUX_ORG) as client:
@@ -247,6 +270,9 @@ from(bucket: "{INFLUX_BUCKET}")
 @app.get("/api/sessions/{session_id}/laps")
 async def session_laps(session_id: str):
     """All laps for a single session, in lap order."""
+    if not _valid_sid(session_id):
+        return JSONResponse([])
+
     def _fetch():
         flux = f"""
 from(bucket: "{INFLUX_BUCKET}")
@@ -281,27 +307,6 @@ from(bucket: "{INFLUX_BUCKET}")
 
 
 # ── Telemetry analysis helpers ─────────────────────────────────────────────────
-
-def _lerp(xs: list, ys: list, x: float) -> float:
-    """Linear interpolation at x given sorted xs and corresponding ys."""
-    if not xs:
-        return 0.0
-    if x <= xs[0]:
-        return ys[0]
-    if x >= xs[-1]:
-        return ys[-1]
-    lo, hi = 0, len(xs) - 1
-    while lo < hi - 1:
-        mid = (lo + hi) // 2
-        if xs[mid] <= x:
-            lo = mid
-        else:
-            hi = mid
-    span = xs[hi] - xs[lo]
-    if span == 0:
-        return ys[lo]
-    return ys[lo] + (x - xs[lo]) / span * (ys[hi] - ys[lo])
-
 
 def _detect_contacts(points: list) -> list:
     """Detect wall/car contacts from G-spike analysis.
@@ -353,6 +358,8 @@ def _detect_jumps(points: list) -> list:
 @app.get("/api/sessions/{session_id}/track")
 async def session_track(session_id: str):
     """Return ~6 Hz downsampled telemetry for the session with event detection."""
+    if not _valid_sid(session_id):
+        return JSONResponse({"points": [], "contacts": [], "jumps": [], "bounds": {}, "laps": []})
 
     def _fetch():
         fields = [
@@ -573,6 +580,8 @@ async def analysis_laps(picks: str = "", raw: int = 0):
         if not token or ":" not in token:
             continue
         sid, _, lap_s = token.rpartition(":")
+        if not _valid_sid(sid):
+            continue
         try:
             parsed.append((sid, int(lap_s)))
         except ValueError:
@@ -721,76 +730,6 @@ async def reset_layout():
     return JSONResponse({"ok": True})
 
 
-@app.get("/api/analysis/telemetry")
-async def analysis_telemetry(session_id: str = "", minutes: int = 5):
-    """Return ~10 Hz time-series telemetry for the driver-inputs / speed-engine / G-force charts.
-
-    If session_id is given, returns that session's full telemetry (downsampled).
-    Otherwise returns the most recent `minutes` of data across all sessions.
-    """
-    def _fetch():
-        fields = [
-            "throttle_pct", "brake_pct", "clutch_pct",
-            "speed_kmh", "engine_rpm", "engine_max_rpm",
-            "g_lateral", "g_longitudinal",
-        ]
-        field_filter = " or ".join(f'r._field == "{f}"' for f in fields)
-
-        if session_id:
-            sid_filter = f'|> filter(fn: (r) => r.session_id == "{session_id}")'
-            range_str  = "start: -365d"
-        else:
-            sid_filter = ""
-            range_str  = f"start: -{minutes}m"
-
-        flux = f"""
-from(bucket: "{INFLUX_BUCKET}")
-  |> range({range_str})
-  |> filter(fn: (r) => r._measurement == "telemetry")
-  {sid_filter}
-  |> filter(fn: (r) => {field_filter})
-  |> pivot(rowKey: ["_time"], columnKey: ["_field"], valueColumn: "_value")
-  |> sort(columns: ["_time"])
-"""
-        rows = _query(flux)
-
-        # Thin to ≤1200 points (~2 min at 10 Hz)
-        step = max(1, len(rows) // 1200)
-        rows = rows[::step]
-
-        def fv(row, key, default=0.0):
-            v = row.get(key)
-            return float(v) if v is not None else default
-
-        points = []
-        t0 = None
-        for row in rows:
-            ts = row.get("_time")
-            if ts is None:
-                continue
-            t_s = ts.timestamp() if hasattr(ts, "timestamp") else float(str(ts)[:10])
-            if t0 is None:
-                t0 = t_s
-            points.append({
-                "t":   round(t_s - t0, 2),
-                "thr": round(fv(row, "throttle_pct"), 1),
-                "brk": round(fv(row, "brake_pct"), 1),
-                "clt": round(fv(row, "clutch_pct"), 1),
-                "spd": round(fv(row, "speed_kmh"), 1),
-                "rpm": round(fv(row, "engine_rpm")),
-                "mrpm": round(fv(row, "engine_max_rpm")),
-                "gL":  round(fv(row, "g_lateral"), 3),
-                "gN":  round(fv(row, "g_longitudinal"), 3),
-            })
-        return {"points": points, "duration": round(points[-1]["t"], 1) if points else 0}
-
-    try:
-        return JSONResponse(await run_in_threadpool(_fetch))
-    except Exception as exc:
-        log.warning("Analysis telemetry query failed: %s", exc)
-        return JSONResponse({"points": [], "duration": 0})
-
-
 @app.get("/api/laps")
 async def laps(limit: int = 20):
     try:
@@ -801,23 +740,40 @@ async def laps(limit: int = 20):
 
 # ── Static ─────────────────────────────────────────────────────────────────────
 
-class RevalidatingStatics(StaticFiles):
-    """Force browsers to revalidate the page shells on every load.
+class CacheControlMiddleware:
+    """Force browsers to revalidate HTML/JSON responses on every load.
 
     Without an explicit Cache-Control, a browser applies *heuristic* freshness
     (roughly 10% of the file's age) and will serve index/analytics from cache
     without ever asking us — so a redeploy appears to change nothing until the
-    user happens to hard-refresh. ETag is already sent, so revalidation costs
-    one 304 with an empty body. Vendored assets keep caching normally; they are
-    immutable in practice and are the bulk of the bytes.
+    user happens to hard-refresh. ETag is still sent by StaticFiles, so
+    revalidation costs one 304 with an empty body. Vendored js/css keep caching
+    normally; they are immutable in practice and are the bulk of the bytes.
+
+    Implemented as pure ASGI on the response content-type — the previous
+    approach subclassed StaticFiles.file_response(), which is a private
+    Starlette method whose signature is free to change under us.
     """
 
-    def file_response(self, *args, **kwargs):
-        response = super().file_response(*args, **kwargs)
-        path = str(args[0]) if args else ""
-        if path.endswith((".html", ".json")):
-            response.headers["Cache-Control"] = "no-cache, must-revalidate"
-        return response
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            return await self.app(scope, receive, send)
+
+        async def send_wrapper(message):
+            if message["type"] == "http.response.start":
+                headers = MutableHeaders(raw=message.setdefault("headers", []))
+                ctype = headers.get("content-type", "")
+                # SSE sets its own Cache-Control and is text/event-stream, so
+                # this never touches the live stream.
+                if ctype.startswith(("text/html", "application/json")):
+                    headers["Cache-Control"] = "no-cache, must-revalidate"
+            await send(message)
+
+        await self.app(scope, receive, send_wrapper)
 
 
-app.mount("/", RevalidatingStatics(directory="static", html=True), name="static")
+app.add_middleware(CacheControlMiddleware)
+app.mount("/", StaticFiles(directory="static", html=True), name="static")
