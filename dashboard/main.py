@@ -31,6 +31,7 @@ INFLUX_TOKEN  = os.environ.get("INFLUXDB_TOKEN",  "")
 INFLUX_ORG    = os.environ.get("INFLUXDB_ORG",    "pitlane")
 INFLUX_BUCKET = os.environ.get("INFLUXDB_BUCKET", "forza")
 RELAY_FILE    = os.environ.get("RELAY_FILE", "/relay/latest.json")
+LAYOUT_FILE   = os.environ.get("LAYOUT_FILE", "/data/layout.json")
 
 STALE_SECS = 5.0
 
@@ -493,6 +494,57 @@ from(bucket: "{INFLUX_BUCKET}")
 @app.get("/api/version")
 async def version():
     return JSONResponse({"version": _read_version()})
+
+
+# ── Dashboard layout persistence ──────────────────────────────────────────────
+# Stored server-side so a customised layout follows the user to any browser or
+# machine. The browser also keeps a localStorage copy for instant first paint.
+
+@app.get("/api/layout")
+async def get_layout():
+    def _read():
+        try:
+            with open(LAYOUT_FILE) as f:
+                return json.load(f)
+        except (OSError, ValueError):
+            return {}
+    return JSONResponse(await run_in_threadpool(_read))
+
+
+@app.post("/api/layout")
+async def save_layout(request: Request):
+    try:
+        data = await request.json()
+    except ValueError:
+        return JSONResponse({"ok": False, "error": "invalid JSON"}, status_code=400)
+
+    if not isinstance(data, dict) or "layout" not in data:
+        return JSONResponse({"ok": False, "error": "expected {layout, hidden}"}, status_code=400)
+
+    def _write():
+        os.makedirs(os.path.dirname(LAYOUT_FILE), exist_ok=True)
+        tmp = LAYOUT_FILE + ".tmp"
+        with open(tmp, "w") as f:
+            json.dump(data, f)
+        os.replace(tmp, LAYOUT_FILE)   # atomic — never leaves a half-written file
+
+    try:
+        await run_in_threadpool(_write)
+    except OSError as exc:
+        log.warning("Layout save failed: %s", exc)
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=500)
+    return JSONResponse({"ok": True})
+
+
+@app.delete("/api/layout")
+async def reset_layout():
+    def _rm():
+        try:
+            os.remove(LAYOUT_FILE)
+        except OSError:
+            pass
+    await run_in_threadpool(_rm)
+    return JSONResponse({"ok": True})
 
 
 @app.get("/api/analysis/telemetry")

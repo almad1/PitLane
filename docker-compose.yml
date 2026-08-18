@@ -65,8 +65,10 @@ services:
       INFLUXDB_ORG: ${INFLUXDB_ORG}
       INFLUXDB_BUCKET: ${INFLUXDB_BUCKET}
       RELAY_FILE: /relay/latest.json
+      LAYOUT_FILE: /data/layout.json
     volumes:
       - relay_data:/relay
+      - dashboard_data:/data   # persistent — relay_data is tmpfs and would lose the layout
     depends_on:
       influxdb:
         condition: service_healthy
@@ -98,6 +100,7 @@ volumes:
   influxdb_data:
   influxdb_config:
   grafana_data:
+  dashboard_data:    # saved dashboard layout
   relay_data:        # tmpfs-backed in the VM; shared between collector & dashboard
     driver: local
     driver_opts:

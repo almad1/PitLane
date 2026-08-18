@@ -6,6 +6,8 @@
 <title>🏁 PitLane</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/gridstack@11/dist/gridstack.min.css"/>
+<script src="https://cdn.jsdelivr.net/npm/gridstack@11/dist/gridstack-all.js"></script>
 <style>
 /* ── Reset & base ─────────────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -16,6 +18,7 @@
   --surface2:  #13132a;
   --border:    #1e1e3a;
   --primary:   #00d4ff;
+  --cyan:      #00d4ff;
   --orange:    #ff6b00;
   --green:     #00ff87;
   --gold:      #ffd700;
@@ -33,8 +36,6 @@ body {
   font-family: var(--font-ui);
   min-height: 100dvh;
   overflow-x: hidden;
-  display: flex;
-  flex-direction: column;
 }
 
 /* ── Header ───────────────────────────────────────────────────────────────── */
@@ -42,7 +43,7 @@ body {
   display: flex; align-items: center; gap: 20px;
   padding: 0 16px; height: 48px;
   background: var(--surface); border-bottom: 1px solid var(--border);
-  flex-shrink: 0; position: sticky; top: 0; z-index: 50;
+  flex-shrink: 0; position: sticky; top: 0; z-index: 900;
 }
 #header .logo { font-size: 1.1rem; font-weight: 700; letter-spacing: 3px; color: var(--primary); }
 #header .logo span { color: var(--muted); font-weight: 400; }
@@ -59,65 +60,111 @@ body {
 #live-badge.menu  { background: rgba(255,107,0,0.15); color: var(--orange); border-color: var(--orange); }
 #live-badge.paused { background: rgba(157,78,221,0.15); color: var(--purple); border-color: var(--purple); }
 #live-badge.live::before, #live-badge.menu::before { content: '● '; }
-#grafana-link {
+.hdr-link {
   font-size: 0.7rem; color: var(--muted); text-decoration: none;
   padding: 4px 10px; border: 1px solid var(--border); border-radius: 3px;
+  background: none; cursor: pointer; font-family: var(--font-ui);
 }
-#grafana-link:hover { color: var(--primary); border-color: var(--primary); }
+.hdr-link:hover { color: var(--primary); border-color: var(--primary); }
+#edit-toggle.on { color: var(--gold); border-color: var(--gold); background: rgba(255,215,0,0.1); }
 
-/* ── Dashboard layout ─────────────────────────────────────────────────────── */
-#dash { display: flex; flex-direction: column; }
-#dash-grid {
-  display: grid;
-  grid-template-columns: 380px 420px 240px 1fr;
-  grid-template-areas: "tacho  laptimes  inputs  tyres";
-  gap: 8px; padding: 8px 8px 0;
+/* ── Edit toolbar ─────────────────────────────────────────────────────────── */
+#edit-bar {
+  display: none; align-items: center; gap: 10px;
+  padding: 7px 16px; background: rgba(255,215,0,0.05);
+  border-bottom: 1px solid var(--border);
+  position: sticky; top: 48px; z-index: 890;
 }
+body.editing #edit-bar { display: flex; }
+.edit-hint { font: 0.65rem var(--font-mono); color: var(--muted); letter-spacing: 1px; }
+#save-flash { font: 0.65rem var(--font-mono); color: var(--green); opacity: 0; transition: opacity 0.3s; margin-left: auto; }
+#save-flash.show { opacity: 1; }
+.edit-btn {
+  font: 700 0.62rem var(--font-mono); letter-spacing: 1.5px;
+  padding: 4px 11px; border-radius: 3px; cursor: pointer;
+  background: none; border: 1px solid var(--border); color: var(--muted);
+  transition: all 0.15s;
+}
+.edit-btn:hover { color: var(--text); border-color: var(--muted); }
+.edit-btn.danger:hover { color: var(--red); border-color: var(--red); }
 
-/* ── Cards ────────────────────────────────────────────────────────────────── */
-.card {
+/* ── Widget picker ────────────────────────────────────────────────────────── */
+#picker-wrap { position: relative; }
+#picker {
+  display: none; position: absolute; top: calc(100% + 6px); left: 0;
+  background: var(--surface); border: 1px solid var(--border2, var(--border));
+  border-radius: 5px; padding: 7px; z-index: 950; min-width: 210px;
+  box-shadow: 0 8px 28px rgba(0,0,0,0.6);
+}
+#picker.open { display: block; }
+.picker-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 5px 7px; border-radius: 3px; cursor: pointer;
+  font: 0.66rem var(--font-mono); color: var(--muted); letter-spacing: 1px;
+}
+.picker-row:hover { background: var(--surface2); color: var(--text); }
+.picker-row input { accent-color: var(--primary); cursor: pointer; }
+.picker-row.on { color: var(--text); }
+
+/* ── GridStack ────────────────────────────────────────────────────────────── */
+.grid-stack { background: transparent; }
+.grid-stack-item-content {
   background: var(--surface); border: 1px solid var(--border); border-radius: 6px;
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  padding: 10px; overflow: hidden; position: relative;
+  display: flex; flex-direction: column; overflow: hidden;
 }
-.card-label {
-  font-size: 0.6rem; letter-spacing: 2px; text-transform: uppercase;
-  color: var(--muted); margin-bottom: 4px; align-self: flex-start;
+body.editing .grid-stack-item-content {
+  border-color: rgba(255,215,0,0.35); cursor: move;
+}
+body.editing .grid-stack-item-content:hover { border-color: var(--gold); }
+.grid-stack > .grid-stack-item > .ui-resizable-handle { display: none; }
+body.editing .grid-stack > .grid-stack-item > .ui-resizable-handle { display: block; }
+.grid-stack-placeholder > .placeholder-content {
+  border: 1px dashed var(--gold); border-radius: 6px; background: rgba(255,215,0,0.05);
+}
+
+/* ── Tiles ────────────────────────────────────────────────────────────────── */
+.tile-hdr { display: flex; align-items: center; gap: 6px; padding: 6px 10px 2px; flex-shrink: 0; }
+.tile-title {
+  font: 0.55rem var(--font-mono); color: var(--muted);
+  letter-spacing: 2px; text-transform: uppercase;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.tile-hide {
+  display: none; margin-left: auto; flex-shrink: 0;
+  background: none; border: none; color: var(--muted);
+  cursor: pointer; font-size: 0.75rem; line-height: 1; padding: 2px 4px; border-radius: 3px;
+}
+body.editing .tile-hide { display: block; }
+.tile-hide:hover { color: var(--red); background: rgba(255,59,59,0.12); }
+.tile-body {
+  flex: 1; min-height: 0; overflow: hidden;
+  padding: 0 10px 9px; display: flex; flex-direction: column;
 }
 
 /* ── Tachometer ───────────────────────────────────────────────────────────── */
-.card-tacho {
-  grid-area: tacho; flex-direction: column;
-  padding: 8px 12px 10px; align-items: stretch; gap: 4px;
-}
-.tacho-dots { display: flex; gap: 6px; justify-content: center; align-items: center; height: 16px; }
+.tacho-dots { display: flex; gap: 5px; justify-content: center; align-items: center; height: 13px; flex-shrink: 0; }
 .tacho-dot {
-  width: 8px; height: 8px; border-radius: 50%;
+  width: 7px; height: 7px; border-radius: 50%;
   background: var(--border); transition: background 0.1s, box-shadow 0.1s; flex-shrink: 0;
 }
 .tacho-dot.active  { background: var(--green);  box-shadow: 0 0 6px var(--green); }
 .tacho-dot.reverse { background: var(--orange); box-shadow: 0 0 6px var(--orange); }
-.tacho-body { display: flex; align-items: center; }
+.tacho-body { display: flex; align-items: center; flex: 1; min-height: 0; }
 #tacho-canvas { flex-shrink: 0; display: block; }
 .tacho-right {
   flex: 1; display: flex; flex-direction: column;
   justify-content: center; padding-left: 10px; min-width: 0;
 }
-.tacho-car-class { font: 0.6rem var(--font-mono); color: var(--muted); letter-spacing: 2px; margin-bottom: 6px; }
-.tacho-speed { font: 700 2.8rem/1 var(--font-mono); color: var(--text); letter-spacing: -2px; }
-.tacho-speed-unit { font: 0.6rem var(--font-mono); color: var(--muted); letter-spacing: 3px; margin-top: 4px; }
+.tacho-car-class { font: 0.6rem var(--font-mono); color: var(--muted); letter-spacing: 2px; margin-bottom: 5px; }
+.tacho-speed { font: 700 2.6rem/1 var(--font-mono); color: var(--text); letter-spacing: -2px; }
+.tacho-speed-unit { font: 0.55rem var(--font-mono); color: var(--muted); letter-spacing: 3px; margin-top: 3px; }
 .tacho-stats { display: flex; gap: 16px; margin-top: 8px; }
 .tacho-stat { display: flex; flex-direction: column; gap: 2px; }
-.tacho-stat-val { font: 700 1.1rem/1 var(--font-mono); color: var(--text); }
-.tacho-stat-lbl { font: 0.55rem var(--font-mono); color: var(--muted); letter-spacing: 2px; }
+.tacho-stat-val { font: 700 1rem/1 var(--font-mono); color: var(--text); }
+.tacho-stat-lbl { font: 0.52rem var(--font-mono); color: var(--muted); letter-spacing: 2px; }
 
-/* ── Combined Lap Times ───────────────────────────────────────────────────── */
-.card-laptimes {
-  grid-area: laptimes; flex-direction: column;
-  align-items: stretch; padding: 8px 14px; gap: 6px;
-}
-.lp-hdr { display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
-.lp-hdr-text { font: 0.58rem var(--font-mono); color: var(--muted); letter-spacing: 2px; text-transform: uppercase; }
+/* ── Lap times ────────────────────────────────────────────────────────────── */
+.lp-top { display: flex; align-items: center; justify-content: flex-end; flex-shrink: 0; margin-bottom: 5px; }
 .lp-mode {
   font: 700 0.55rem var(--font-mono); letter-spacing: 2px;
   padding: 2px 10px; border-radius: 20px;
@@ -125,45 +172,39 @@ body {
 }
 .lp-delta-track {
   height: 3px; background: var(--surface2); border-radius: 2px;
-  position: relative; flex-shrink: 0;
+  position: relative; flex-shrink: 0; margin-bottom: 8px;
 }
 .lp-delta-bar {
   position: absolute; height: 100%; border-radius: 2px;
   left: 50%; width: 0; transition: left 0.3s, width 0.3s, background 0.3s;
 }
-.lp-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 16px; flex: 1; }
-.lp-cell { display: flex; flex-direction: column; gap: 3px; }
-.lp-lbl { font: 0.55rem var(--font-mono); color: var(--muted); letter-spacing: 2px; }
-.lp-val { font: 700 1.1rem/1 var(--font-mono); color: var(--text); }
+.lp-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 16px; flex: 1; align-content: space-around; }
+.lp-cell { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.lp-lbl { font: 0.52rem var(--font-mono); color: var(--muted); letter-spacing: 2px; }
+.lp-val { font: 700 1.1rem/1 var(--font-mono); color: var(--text); white-space: nowrap; }
 .lp-val.lp-current { font-size: 1.35rem; }
 .lp-val.lp-best { color: var(--green); }
 .lp-val.new-best { color: var(--gold); text-shadow: 0 0 16px rgba(255,215,0,0.4); }
 
-/* ── Inputs (throttle / brake / boost / fuel) ─────────────────────────────── */
-.card-inputs {
-  grid-area: inputs; flex-direction: row;
-  gap: 10px; padding: 10px 14px; align-items: stretch; justify-content: flex-start;
-}
-.card-tyre-grip {
-  grid-area: tyres; flex-direction: column;
-  align-items: stretch; justify-content: flex-start;
-  padding: 10px 12px; gap: 8px;
-}
-.input-group { display: flex; flex-direction: column; gap: 6px; width: 100%; }
+/* ── Inputs ───────────────────────────────────────────────────────────────── */
+.input-group { display: flex; flex-direction: column; gap: 6px; width: 100%; justify-content: center; flex: 1; }
 .input-row { display: flex; align-items: center; gap: 8px; }
-.input-lbl { font: 0.6rem var(--font-mono); color: var(--muted); width: 28px; letter-spacing: 1px; }
-.input-bar-wrap { flex: 1; height: 12px; background: var(--surface2); border-radius: 2px; overflow: hidden; }
+.input-lbl { font: 0.6rem var(--font-mono); color: var(--muted); width: 30px; letter-spacing: 1px; flex-shrink: 0; }
+.input-bar-wrap { flex: 1; height: 12px; background: var(--surface2); border-radius: 2px; overflow: hidden; min-width: 0; }
 .input-bar { height: 100%; width: 0%; border-radius: 2px; }
 .bar-thr { background: var(--green); }
 .bar-brk { background: var(--red); }
 .bar-boost { background: var(--orange); }
 .bar-fuel  { background: var(--primary); }
-.bar-steer-wrap { flex: 1; height: 12px; background: var(--surface2); border-radius: 2px; position: relative; overflow: hidden; }
+.bar-steer-wrap { flex: 1; height: 12px; background: var(--surface2); border-radius: 2px; position: relative; overflow: hidden; min-width: 0; }
 .bar-steer { position: absolute; top: 0; height: 100%; background: var(--cyan); border-radius: 2px; transition: left 0.08s, width 0.08s; }
 .bar-steer-center { position: absolute; left: calc(50% - 0.5px); top: 0; width: 1px; height: 100%; background: rgba(255,255,255,0.18); pointer-events: none; }
-.input-pct { font: 0.6rem var(--font-mono); color: var(--muted); width: 36px; text-align: right; }
+.input-pct { font: 0.6rem var(--font-mono); color: var(--muted); width: 42px; text-align: right; flex-shrink: 0; }
 
 /* ── G-force ──────────────────────────────────────────────────────────────── */
+.ck-friction-body { align-items: center; justify-content: center; gap: 6px; }
+#gforce-svg { width: 100%; max-width: 100%; flex: 1; min-height: 0; aspect-ratio: 1; overflow: hidden; display: block; }
+.ck-g-vals { font: 0.62rem var(--font-mono); color: var(--muted); text-align: center; flex-shrink: 0; }
 .g-ring { fill: none; stroke: var(--border); stroke-width: 0.8; }
 .g-ring-1g { stroke: var(--surface2); stroke-width: 1.2; }
 .g-axis { stroke: var(--border); stroke-width: 0.6; }
@@ -171,40 +212,122 @@ body {
 #g-dot { fill: var(--primary); filter: drop-shadow(0 0 4px var(--primary)); }
 .g-trail-dot { fill: var(--primary); opacity: 0.15; }
 
+/* ── Tyre grip ────────────────────────────────────────────────────────────── */
+.grip-layout { display: flex; gap: 6px; align-items: center; justify-content: center; flex: 1; min-height: 0; }
+.grip-col { display: flex; flex-direction: column; gap: 8px; flex: 0 0 auto; }
+.grip-tire { display: flex; flex-direction: column; align-items: center; gap: 3px; }
+.grip-lbl { font: 700 0.58rem var(--font-mono); color: var(--muted); letter-spacing: 1px; }
+.grip-row-l, .grip-row-r { display: flex; align-items: center; gap: 5px; }
+.grip-oval {
+  width: 40px; height: 52px; border-radius: 30%;
+  border: 2px solid var(--border); background: rgba(255,255,255,0.02);
+  display: flex; align-items: center; justify-content: center;
+  transition: border-color 0.2s, background 0.2s;
+}
+.grip-val { font: 700 0.85rem/1 var(--font-mono); color: var(--muted); transition: color 0.2s; }
+.grip-susp-wrap {
+  width: 5px; height: 42px; background: var(--surface2); border-radius: 3px;
+  overflow: hidden; display: flex; align-items: flex-end;
+}
+.grip-susp-bar {
+  width: 100%; height: 50%; border-radius: 3px;
+  background: var(--primary); transition: height 0.15s, background 0.2s;
+}
+.grip-temp { font: 0.56rem var(--font-mono); color: var(--muted); }
+.grip-car-center { display: flex; align-items: center; justify-content: center; padding: 0 6px; }
+.grip-car-body {
+  width: 34px; height: 68px;
+  border-radius: 35% 35% 20% 20% / 20% 20% 12% 12%;
+  background: var(--surface2); border: 1px solid var(--border);
+}
+.grip-handling {
+  font: 700 0.8rem var(--font-mono); color: var(--muted);
+  letter-spacing: 4px; text-align: center; padding: 3px 0; flex-shrink: 0;
+  transition: color 0.3s;
+}
+
+/* ── GPS trace ────────────────────────────────────────────────────────────── */
+.ck-map-canvas-wrap {
+  flex: 1; min-height: 0; position: relative;
+  border-radius: 4px; overflow: hidden; background: var(--bg);
+}
+#gps-trace-canvas { position: absolute; inset: 0; display: block; }
+
 /* ── Lap history ──────────────────────────────────────────────────────────── */
-.card-history { flex-direction: column; align-items: stretch; padding: 0; overflow: hidden; }
 .history-header {
   display: flex; gap: 0; border-bottom: 1px solid var(--border);
-  font: 0.6rem var(--font-mono); color: var(--muted); letter-spacing: 1px;
-  padding: 5px 12px; text-transform: uppercase;
+  font: 0.58rem var(--font-mono); color: var(--muted); letter-spacing: 1px;
+  padding: 4px 2px; text-transform: uppercase; flex-shrink: 0;
 }
 .history-header div { flex: 1; }
-.history-header .h-lap { flex: 0 0 50px; }
-.history-header .h-sess { flex: 0 0 80px; }
-#lap-rows { overflow-y: visible; }
+.history-header .h-lap { flex: 0 0 34px; }
+.history-header .h-sess { flex: 0 0 66px; }
+#lap-rows { overflow-y: auto; flex: 1; min-height: 0; }
+#lap-rows::-webkit-scrollbar { width: 4px; }
+#lap-rows::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
 .lap-row {
   display: flex; gap: 0; align-items: center;
-  padding: 4px 12px; border-bottom: 1px solid rgba(30,30,58,0.5);
-  font: 0.75rem var(--font-mono);
+  padding: 3px 2px; border-bottom: 1px solid rgba(30,30,58,0.5);
+  font: 0.7rem var(--font-mono);
 }
 .lap-row div { flex: 1; }
-.lap-row .h-lap  { flex: 0 0 50px; color: var(--muted); }
-.lap-row .h-sess { flex: 0 0 80px; color: var(--muted); font-size: 0.6rem; }
+.lap-row .h-lap  { flex: 0 0 34px; color: var(--muted); }
+.lap-row .h-sess { flex: 0 0 66px; color: var(--muted); font-size: 0.58rem; }
 .lap-row.best-lap { background: rgba(255,215,0,0.06); }
 .lap-row.best-lap .lap-time-val { color: var(--gold); font-weight: 700; }
-.lap-badge { font-size: 0.55rem; padding: 1px 5px; border-radius: 2px; margin-left: 6px; font-family: var(--font-ui); }
+.lap-badge { font-size: 0.52rem; padding: 1px 4px; border-radius: 2px; margin-left: 4px; font-family: var(--font-ui); }
 .badge-est   { background: rgba(255,107,0,0.2);  color: var(--orange); }
 .badge-dirty { background: rgba(255,59,59,0.2);  color: var(--red); }
 .badge-best  { background: rgba(255,215,0,0.2);  color: var(--gold); }
 
+/* ── Telemetry tiles ──────────────────────────────────────────────────────── */
+.tel-grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; flex: 1; min-height: 0; }
+.tel-grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; flex: 1; min-height: 0; }
+.tel-card {
+  background: var(--surface2); border: 1px solid var(--border); border-radius: 5px;
+  padding: 6px 9px; display: flex; flex-direction: column; gap: 4px;
+  justify-content: center; min-width: 0; overflow: hidden;
+}
+.tel-label { font: 0.52rem var(--font-mono); letter-spacing: 2px; color: var(--muted); }
+.tel-big-val { font: 700 1.05rem/1 var(--font-mono); color: var(--text); white-space: nowrap; }
+.tel-unit { font: 0.55rem var(--font-ui); color: var(--muted); font-weight: 400; }
+.tel-bar-h { width: 100%; height: 5px; background: var(--bg); border-radius: 3px; overflow: hidden; }
+.tel-bar-fill { height: 100%; width: 0%; border-radius: 3px; transition: width 0.15s; }
+.tel-car-info { display: flex; gap: 22px; align-items: center; flex-wrap: wrap; flex: 1; }
+.tel-ci-item { display: flex; flex-direction: column; gap: 3px; }
+.tel-ci-val { font: 700 1.3rem var(--font-mono); color: var(--primary); }
+.tel-ci-lbl { font: 0.52rem var(--font-mono); letter-spacing: 2px; color: var(--muted); }
+
+/* ── MapGenie map ─────────────────────────────────────────────────────────── */
+.map-overlay-bar {
+  display: flex; gap: 16px; align-items: center; flex-shrink: 0;
+  font: 0.62rem var(--font-mono); color: var(--muted); padding-bottom: 5px;
+}
+.map-overlay-val { color: var(--primary); font-weight: 700; }
+#track-canvas-wrap {
+  position: relative; flex: 1; min-height: 0; width: 100%;
+  border-radius: 4px; overflow: hidden; background: var(--bg);
+}
+#track-map { position: absolute; inset: 0; }
+.leaflet-container { background: var(--bg) !important; }
+.track-legend {
+  display: flex; justify-content: space-between; align-items: center;
+  font: 0.52rem var(--font-mono); color: var(--muted); margin-top: 3px; flex-shrink: 0;
+}
+.track-legend-bar {
+  flex: 1; height: 3px; border-radius: 2px; margin: 0 6px;
+  background: linear-gradient(to right, hsl(240,90%,55%), hsl(120,90%,55%), hsl(60,90%,55%), hsl(0,90%,55%));
+}
+
 /* ── Offline overlay ──────────────────────────────────────────────────────── */
 #offline-overlay {
-  position: fixed; inset: 0; z-index: 100;
+  position: fixed; inset: 0; z-index: 800;
   background: rgba(7,7,15,0.85);
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   gap: 12px; opacity: 0; pointer-events: none; transition: opacity 0.4s;
 }
 #offline-overlay.visible { opacity: 1; pointer-events: auto; }
+body.editing #offline-overlay { display: none; }
 #offline-overlay .msg { font-size: 1rem; color: var(--muted); letter-spacing: 3px; text-transform: uppercase; }
 #offline-overlay .sub { font-size: 0.75rem; color: var(--border); }
 .pulse-ring {
@@ -215,134 +338,9 @@ body {
   0%,100% { transform: scale(1); opacity: 0.5; }
   50%      { transform: scale(1.3); opacity: 0.1; }
 }
-
-/* ── Sub-navigation ───────────────────────────────────────────────────────── */
-#sub-nav {
-  display: flex; gap: 2px; padding: 5px 8px;
-  border-top: 1px solid var(--border); flex-shrink: 0;
-}
-.sub-tab {
-  font: 700 0.6rem var(--font-mono); letter-spacing: 2px;
-  padding: 3px 10px; border-radius: 3px;
-  background: none; color: var(--muted);
-  border: 1px solid transparent; cursor: pointer; transition: all 0.15s;
-}
-.sub-tab:hover { color: var(--text); border-color: var(--border); }
-.sub-tab.active { color: var(--primary); border-color: var(--primary); background: rgba(0,212,255,0.08); }
-
-/* ── Sub-panel switching ──────────────────────────────────────────────────── */
-#sub-panel { }
-.sub-view { display: none; flex-direction: column; }
-#sub-panel[data-sub="cockpit"]   #sub-cockpit   { display: flex; }
-#sub-panel[data-sub="telemetry"] #sub-telemetry { display: flex; }
-#sub-panel[data-sub="map"]       #sub-map       { display: flex; }
-#sub-panel[data-sub="history"]   #sub-history   { display: flex; }
-
-/* ── Cockpit sub-view ─────────────────────────────────────────────────────── */
-#sub-cockpit { padding: 8px; gap: 8px; }
-
-.ck-top-row { display: flex; gap: 8px; }
-
-.ck-section {
-  background: var(--surface); border: 1px solid var(--border); border-radius: 6px;
-  padding: 10px 12px; display: flex; flex-direction: column; gap: 8px;
-}
-.ck-section-hdr {
-  display: flex; align-items: center; gap: 8px; flex-shrink: 0;
-  font: 0.58rem var(--font-mono); color: var(--muted);
-  letter-spacing: 2px; text-transform: uppercase;
-}
-.ck-hdr-dash { color: var(--primary); }
-
-/* Friction circle */
-.ck-friction { flex: 0 0 auto; align-items: center; }
-#gforce-svg { width: 100%; max-width: 155px; aspect-ratio: 1; overflow: hidden; display: block; }
-.ck-g-vals { font: 0.65rem var(--font-mono); color: var(--muted); text-align: center; }
-
-/* Tire grip */
-.ck-tires { flex: 0 0 auto; min-width: 0; }
-.grip-layout { display: flex; gap: 6px; align-items: center; justify-content: center; flex: 1; }
-.grip-col { display: flex; flex-direction: column; gap: 8px; flex: 0 0 auto; }
-.grip-tire { display: flex; flex-direction: column; align-items: center; gap: 4px; }
-.grip-lbl { font: 700 0.6rem var(--font-mono); color: var(--muted); letter-spacing: 1px; }
-.grip-row-l, .grip-row-r { display: flex; align-items: center; gap: 5px; }
-.grip-oval {
-  width: 40px; height: 56px; border-radius: 30%;
-  border: 2px solid var(--border); background: rgba(255,255,255,0.02);
-  display: flex; align-items: center; justify-content: center;
-  transition: border-color 0.2s, background 0.2s;
-}
-.grip-val { font: 700 0.85rem/1 var(--font-mono); color: var(--muted); transition: color 0.2s; }
-.grip-susp-wrap {
-  width: 5px; height: 44px; background: var(--surface2); border-radius: 3px;
-  overflow: hidden; display: flex; align-items: flex-end;
-}
-.grip-susp-bar {
-  width: 100%; height: 50%; border-radius: 3px;
-  background: var(--primary); transition: height 0.15s, background 0.2s;
-}
-.grip-temp { font: 0.58rem var(--font-mono); color: var(--muted); }
-.grip-car-center { display: flex; align-items: center; justify-content: center; padding: 0 8px; }
-.grip-car-body {
-  width: 36px; height: 72px;
-  border-radius: 35% 35% 20% 20% / 20% 20% 12% 12%;
-  background: var(--surface2); border: 1px solid var(--border);
-}
-.grip-handling {
-  font: 700 0.85rem var(--font-mono); color: var(--muted);
-  letter-spacing: 4px; text-align: center; padding: 2px 0;
-  transition: color 0.3s;
-}
-
-/* GPS trace track map */
-.ck-gps-map { flex-shrink: 0; }
-.ck-map-canvas-wrap {
-  flex: 1; min-height: 200px; position: relative;
-  border-radius: 4px; overflow: hidden; background: var(--bg);
-}
-#gps-trace-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
-
-/* ── Telemetry sub-view ───────────────────────────────────────────────────── */
-#sub-telemetry { padding: 8px; gap: 8px; overflow-y: auto; }
-.tel-row-label { font: 0.58rem var(--font-mono); letter-spacing: 3px; color: var(--muted); text-transform: uppercase; }
-.tel-grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
-.tel-grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
-.tel-card {
-  background: var(--surface); border: 1px solid var(--border); border-radius: 6px;
-  padding: 10px 14px; display: flex; flex-direction: column; gap: 6px;
-}
-.tel-label { font: 0.55rem var(--font-mono); letter-spacing: 2px; color: var(--muted); }
-.tel-big-val { font: 700 1.3rem/1 var(--font-mono); color: var(--text); }
-.tel-unit { font: 0.6rem var(--font-ui); color: var(--muted); font-weight: 400; }
-.tel-bar-h { width: 100%; height: 6px; background: var(--surface2); border-radius: 3px; overflow: hidden; }
-.tel-bar-fill { height: 100%; width: 0%; border-radius: 3px; transition: width 0.15s; }
-.tel-car-info {
-  display: flex; gap: 24px; align-items: center; flex-wrap: wrap;
-  background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 10px 16px;
-}
-.tel-ci-item { display: flex; flex-direction: column; gap: 3px; }
-.tel-ci-val { font: 700 1.4rem var(--font-mono); color: var(--primary); }
-.tel-ci-lbl { font: 0.55rem var(--font-mono); letter-spacing: 2px; color: var(--muted); }
-
-/* ── Map sub-view ─────────────────────────────────────────────────────────── */
-#sub-map { padding: 8px; gap: 6px; }
-.map-overlay-bar {
-  display: flex; gap: 16px; align-items: center; flex-shrink: 0;
-  font: 0.65rem var(--font-mono); color: var(--muted);
-}
-.map-overlay-val { color: var(--primary); font-weight: 700; }
-#track-canvas-wrap {
-  position: relative; width: 100%; border-radius: 4px; overflow: hidden; background: var(--bg);
-}
-#track-map { position: absolute; inset: 0; width: 100%; height: 100%; }
-.leaflet-container { background: var(--bg) !important; }
-.track-legend {
-  display: flex; justify-content: space-between; align-items: center;
-  font: 0.55rem var(--font-mono); color: var(--muted); margin-top: 3px; padding: 0 2px;
-}
-.track-legend-bar {
-  flex: 1; height: 3px; border-radius: 2px; margin: 0 6px;
-  background: linear-gradient(to right, hsl(240,90%,55%), hsl(120,90%,55%), hsl(60,90%,55%), hsl(0,90%,55%));
+@media (prefers-reduced-motion: reduce) {
+  .pulse-ring { animation: none; }
+  * { transition-duration: 0.01ms !important; }
 }
 </style>
 </head>
@@ -354,170 +352,192 @@ body {
   <div id="version-badge"></div>
   <div id="session-info">Session <b id="hdr-session">—</b> &nbsp;·&nbsp; <b id="hdr-car">—</b></div>
   <div id="live-badge">OFFLINE</div>
-  <a href="/analytics.html" style="font-size:0.7rem;color:var(--muted);text-decoration:none;padding:4px 10px;border:1px solid var(--border);border-radius:3px;">Analytics</a>
-  <a id="grafana-link" href="#" target="_blank">Grafana ↗</a>
+  <button id="edit-toggle" class="hdr-link" onclick="toggleEdit()">EDIT LAYOUT</button>
+  <a class="hdr-link" href="/analytics.html">Analytics</a>
+  <a class="hdr-link" id="grafana-link" href="#" target="_blank">Grafana ↗</a>
+  <script>document.getElementById('grafana-link').href='http://'+location.hostname+':3000';</script>
 </div>
 
-<!-- ── Dashboard ───────────────────────────────────────────────────────────── -->
-<div id="dash">
-<div id="dash-grid">
+<!-- ── Edit toolbar ────────────────────────────────────────────────────────── -->
+<div id="edit-bar">
+  <span class="edit-hint">DRAG TO MOVE · DRAG EDGES TO RESIZE</span>
+  <span id="picker-wrap">
+    <button class="edit-btn" onclick="togglePicker()">WIDGETS ▾</button>
+    <div id="picker"></div>
+  </span>
+  <button class="edit-btn danger" onclick="resetLayout()">RESET TO DEFAULT</button>
+  <button class="edit-btn" onclick="toggleEdit()">DONE</button>
+  <span id="save-flash">SAVED</span>
+</div>
+
+<!-- ── Dashboard grid ──────────────────────────────────────────────────────── -->
+<div class="grid-stack">
 
   <!-- Tachometer -->
-  <div class="card card-tacho">
-    <div class="tacho-dots" id="tacho-dots"></div>
-    <div class="tacho-body">
-      <canvas id="tacho-canvas" width="160" height="160"></canvas>
-      <div class="tacho-right">
-        <div class="tacho-car-class" id="car-class">—</div>
-        <div class="tacho-speed" id="tacho-speed">0</div>
-        <div class="tacho-speed-unit">KM/H</div>
-        <div class="tacho-stats">
-          <div class="tacho-stat">
-            <div class="tacho-stat-val" id="tacho-kw">0</div>
-            <div class="tacho-stat-lbl">KW</div>
-          </div>
-          <div class="tacho-stat">
-            <div class="tacho-stat-val" id="tacho-psi">0.0</div>
-            <div class="tacho-stat-lbl">PSI</div>
+  <div class="grid-stack-item" gs-id="tacho" gs-x="0" gs-y="0" gs-w="3" gs-h="3" gs-min-w="2" gs-min-h="2">
+    <div class="grid-stack-item-content">
+      <div class="tile-hdr">
+        <span class="tile-title">Tachometer</span>
+        <button class="tile-hide no-drag" onclick="hideWidget('tacho')" title="Hide">✕</button>
+      </div>
+      <div class="tile-body" data-wid="tacho">
+        <div class="tacho-dots" id="tacho-dots"></div>
+        <div class="tacho-body">
+          <canvas id="tacho-canvas"></canvas>
+          <div class="tacho-right">
+            <div class="tacho-car-class" id="car-class">—</div>
+            <div class="tacho-speed" id="tacho-speed">0</div>
+            <div class="tacho-speed-unit">KM/H</div>
+            <div class="tacho-stats">
+              <div class="tacho-stat">
+                <div class="tacho-stat-val" id="tacho-kw">0</div>
+                <div class="tacho-stat-lbl">KW</div>
+              </div>
+              <div class="tacho-stat">
+                <div class="tacho-stat-val" id="tacho-psi">0.0</div>
+                <div class="tacho-stat-lbl">PSI</div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
     </div>
   </div>
 
-  <!-- Combined Lap Times -->
-  <div class="card card-laptimes">
-    <div class="lp-hdr">
-      <span class="lp-hdr-text">LAP · DELTA TO SESSION BEST</span>
-      <span class="lp-mode" id="lp-mode">RACE MODE</span>
-    </div>
-    <div class="lp-delta-track">
-      <div class="lp-delta-bar" id="lp-delta-bar"></div>
-    </div>
-    <div class="lp-grid">
-      <div class="lp-cell">
-        <div class="lp-lbl">CURRENT</div>
-        <div class="lp-val lp-current" id="cur-lap">0:00.000</div>
+  <!-- Lap times -->
+  <div class="grid-stack-item" gs-id="laptimes" gs-x="3" gs-y="0" gs-w="4" gs-h="3" gs-min-w="3" gs-min-h="2">
+    <div class="grid-stack-item-content">
+      <div class="tile-hdr">
+        <span class="tile-title">Lap · Delta to Session Best</span>
+        <button class="tile-hide no-drag" onclick="hideWidget('laptimes')" title="Hide">✕</button>
       </div>
-      <div class="lp-cell">
-        <div class="lp-lbl">LAST</div>
-        <div class="lp-val" id="last-lap-disp">—:——.———</div>
-      </div>
-      <div class="lp-cell">
-        <div class="lp-lbl">SESSION BEST</div>
-        <div class="lp-val lp-best" id="best-lap">—:——.———</div>
-      </div>
-      <div class="lp-cell">
-        <div class="lp-lbl">LAP / POS</div>
-        <div class="lp-val"><span id="lap-num">—</span> / <span id="race-pos">—</span></div>
+      <div class="tile-body" data-wid="laptimes">
+        <div class="lp-top"><span class="lp-mode" id="lp-mode">RACE MODE</span></div>
+        <div class="lp-delta-track"><div class="lp-delta-bar" id="lp-delta-bar"></div></div>
+        <div class="lp-grid">
+          <div class="lp-cell">
+            <div class="lp-lbl">CURRENT</div>
+            <div class="lp-val lp-current" id="cur-lap">0:00.000</div>
+          </div>
+          <div class="lp-cell">
+            <div class="lp-lbl">LAST</div>
+            <div class="lp-val" id="last-lap-disp">—:——.———</div>
+          </div>
+          <div class="lp-cell">
+            <div class="lp-lbl">SESSION BEST</div>
+            <div class="lp-val lp-best" id="best-lap">—:——.———</div>
+          </div>
+          <div class="lp-cell">
+            <div class="lp-lbl">LAP / POS</div>
+            <div class="lp-val"><span id="lap-num">—</span> / <span id="race-pos">—</span></div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
 
   <!-- Inputs -->
-  <div class="card card-inputs">
-    <div class="input-group">
-      <div class="card-label" style="margin-bottom:2px">INPUTS</div>
-      <div class="input-row">
-        <span class="input-lbl">THR</span>
-        <div class="input-bar-wrap"><div id="bar-thr" class="input-bar bar-thr"></div></div>
-        <span class="input-pct" id="pct-thr">0%</span>
+  <div class="grid-stack-item" gs-id="inputs" gs-x="7" gs-y="0" gs-w="2" gs-h="3" gs-min-w="2" gs-min-h="2">
+    <div class="grid-stack-item-content">
+      <div class="tile-hdr">
+        <span class="tile-title">Inputs</span>
+        <button class="tile-hide no-drag" onclick="hideWidget('inputs')" title="Hide">✕</button>
       </div>
-      <div class="input-row">
-        <span class="input-lbl">BRK</span>
-        <div class="input-bar-wrap"><div id="bar-brk" class="input-bar bar-brk"></div></div>
-        <span class="input-pct" id="pct-brk">0%</span>
-      </div>
-      <div class="input-row">
-        <span class="input-lbl">STR</span>
-        <div class="bar-steer-wrap">
-          <div id="bar-steer" class="bar-steer"></div>
-          <div class="bar-steer-center"></div>
+      <div class="tile-body" data-wid="inputs">
+        <div class="input-group">
+          <div class="input-row">
+            <span class="input-lbl">THR</span>
+            <div class="input-bar-wrap"><div id="bar-thr" class="input-bar bar-thr"></div></div>
+            <span class="input-pct" id="pct-thr">0%</span>
+          </div>
+          <div class="input-row">
+            <span class="input-lbl">BRK</span>
+            <div class="input-bar-wrap"><div id="bar-brk" class="input-bar bar-brk"></div></div>
+            <span class="input-pct" id="pct-brk">0%</span>
+          </div>
+          <div class="input-row">
+            <span class="input-lbl">STR</span>
+            <div class="bar-steer-wrap">
+              <div id="bar-steer" class="bar-steer"></div>
+              <div class="bar-steer-center"></div>
+            </div>
+            <span class="input-pct" id="pct-steer">0%</span>
+          </div>
+          <div class="input-row">
+            <span class="input-lbl">BST</span>
+            <div class="input-bar-wrap"><div id="bar-boost" class="input-bar bar-boost"></div></div>
+            <span class="input-pct" id="pct-boost">0 psi</span>
+          </div>
+          <div class="input-row">
+            <span class="input-lbl">FUEL</span>
+            <div class="input-bar-wrap"><div id="bar-fuel" class="input-bar bar-fuel"></div></div>
+            <span class="input-pct" id="pct-fuel">0%</span>
+          </div>
         </div>
-        <span class="input-pct" id="pct-steer">0%</span>
-      </div>
-      <div class="input-row">
-        <span class="input-lbl">BST</span>
-        <div class="input-bar-wrap"><div id="bar-boost" class="input-bar bar-boost"></div></div>
-        <span class="input-pct" id="pct-boost">0 psi</span>
-      </div>
-      <div class="input-row">
-        <span class="input-lbl">FUEL</span>
-        <div class="input-bar-wrap"><div id="bar-fuel" class="input-bar bar-fuel"></div></div>
-        <span class="input-pct" id="pct-fuel">0%</span>
       </div>
     </div>
   </div>
 
-  <!-- Tyre Grip -->
-  <div class="card card-tyre-grip">
-    <div class="ck-section-hdr">
-      <span class="ck-hdr-dash">—</span>
-      TYRE GRIP · SLIP / TEMP / SPRING
-    </div>
-    <div class="grip-layout">
-      <div class="grip-col">
-        <div class="grip-tire">
-          <div class="grip-lbl">FL</div>
-          <div class="grip-row-l">
-            <div class="grip-oval" id="grip-oval-fl"><div class="grip-val" id="grip-val-fl">—</div></div>
-            <div class="grip-susp-wrap"><div class="grip-susp-bar" id="grip-susp-fl"></div></div>
-          </div>
-          <div class="grip-temp" id="grip-temp-fl">—°</div>
-        </div>
-        <div class="grip-tire">
-          <div class="grip-lbl">RL</div>
-          <div class="grip-row-l">
-            <div class="grip-oval" id="grip-oval-rl"><div class="grip-val" id="grip-val-rl">—</div></div>
-            <div class="grip-susp-wrap"><div class="grip-susp-bar" id="grip-susp-rl"></div></div>
-          </div>
-          <div class="grip-temp" id="grip-temp-rl">—°</div>
-        </div>
+  <!-- Tyre grip -->
+  <div class="grid-stack-item" gs-id="tyres" gs-x="9" gs-y="0" gs-w="3" gs-h="3" gs-min-w="2" gs-min-h="3">
+    <div class="grid-stack-item-content">
+      <div class="tile-hdr">
+        <span class="tile-title">Tyre Grip · Slip / Temp / Spring</span>
+        <button class="tile-hide no-drag" onclick="hideWidget('tyres')" title="Hide">✕</button>
       </div>
-      <div class="grip-car-center"><div class="grip-car-body"></div></div>
-      <div class="grip-col">
-        <div class="grip-tire">
-          <div class="grip-lbl">FR</div>
-          <div class="grip-row-r">
-            <div class="grip-susp-wrap"><div class="grip-susp-bar" id="grip-susp-fr"></div></div>
-            <div class="grip-oval" id="grip-oval-fr"><div class="grip-val" id="grip-val-fr">—</div></div>
+      <div class="tile-body" data-wid="tyres">
+        <div class="grip-layout">
+          <div class="grip-col">
+            <div class="grip-tire">
+              <div class="grip-lbl">FL</div>
+              <div class="grip-row-l">
+                <div class="grip-oval" id="grip-oval-fl"><div class="grip-val" id="grip-val-fl">—</div></div>
+                <div class="grip-susp-wrap"><div class="grip-susp-bar" id="grip-susp-fl"></div></div>
+              </div>
+              <div class="grip-temp" id="grip-temp-fl">—°</div>
+            </div>
+            <div class="grip-tire">
+              <div class="grip-lbl">RL</div>
+              <div class="grip-row-l">
+                <div class="grip-oval" id="grip-oval-rl"><div class="grip-val" id="grip-val-rl">—</div></div>
+                <div class="grip-susp-wrap"><div class="grip-susp-bar" id="grip-susp-rl"></div></div>
+              </div>
+              <div class="grip-temp" id="grip-temp-rl">—°</div>
+            </div>
           </div>
-          <div class="grip-temp" id="grip-temp-fr">—°</div>
-        </div>
-        <div class="grip-tire">
-          <div class="grip-lbl">RR</div>
-          <div class="grip-row-r">
-            <div class="grip-susp-wrap"><div class="grip-susp-bar" id="grip-susp-rr"></div></div>
-            <div class="grip-oval" id="grip-oval-rr"><div class="grip-val" id="grip-val-rr">—</div></div>
+          <div class="grip-car-center"><div class="grip-car-body"></div></div>
+          <div class="grip-col">
+            <div class="grip-tire">
+              <div class="grip-lbl">FR</div>
+              <div class="grip-row-r">
+                <div class="grip-susp-wrap"><div class="grip-susp-bar" id="grip-susp-fr"></div></div>
+                <div class="grip-oval" id="grip-oval-fr"><div class="grip-val" id="grip-val-fr">—</div></div>
+              </div>
+              <div class="grip-temp" id="grip-temp-fr">—°</div>
+            </div>
+            <div class="grip-tire">
+              <div class="grip-lbl">RR</div>
+              <div class="grip-row-r">
+                <div class="grip-susp-wrap"><div class="grip-susp-bar" id="grip-susp-rr"></div></div>
+                <div class="grip-oval" id="grip-oval-rr"><div class="grip-val" id="grip-val-rr">—</div></div>
+              </div>
+              <div class="grip-temp" id="grip-temp-rr">—°</div>
+            </div>
           </div>
-          <div class="grip-temp" id="grip-temp-rr">—°</div>
         </div>
+        <div class="grip-handling" id="grip-handling">NEUTRAL</div>
       </div>
     </div>
-    <div class="grip-handling" id="grip-handling">NEUTRAL</div>
   </div>
 
-</div><!-- end #dash-grid -->
-
-<!-- Sub-navigation -->
-<div id="sub-nav">
-  <button class="sub-tab active" data-sub="cockpit" onclick="switchSubView('cockpit')">COCKPIT</button>
-  <button class="sub-tab" data-sub="telemetry" onclick="switchSubView('telemetry')">TELEMETRY</button>
-  <button class="sub-tab" data-sub="map" onclick="switchSubView('map')">MAP</button>
-  <button class="sub-tab" data-sub="history" onclick="switchSubView('history')">HISTORY</button>
-</div>
-
-<!-- Sub-panel -->
-<div id="sub-panel" data-sub="cockpit">
-
-  <!-- ── Cockpit ── -->
-  <div id="sub-cockpit" class="sub-view">
-      <!-- Friction Circle -->
-      <div class="ck-section ck-friction">
-        <div class="ck-section-hdr">
-          <span class="ck-hdr-dash">—</span>
-          FRICTION CIRCLE
-        </div>
+  <!-- Friction circle -->
+  <div class="grid-stack-item" gs-id="friction" gs-x="0" gs-y="3" gs-w="3" gs-h="4" gs-min-w="2" gs-min-h="3">
+    <div class="grid-stack-item-content">
+      <div class="tile-hdr">
+        <span class="tile-title">Friction Circle</span>
+        <button class="tile-hide no-drag" onclick="hideWidget('friction')" title="Hide">✕</button>
+      </div>
+      <div class="tile-body ck-friction-body" data-wid="friction">
         <svg id="gforce-svg" viewBox="0 0 180 180" xmlns="http://www.w3.org/2000/svg" overflow="hidden">
           <circle class="g-ring" cx="90" cy="90" r="65"/>
           <circle class="g-ring-1g" cx="90" cy="90" r="44"/>
@@ -540,94 +560,158 @@ body {
           &nbsp; Total <span id="g-total-val" style="color:var(--text);font-weight:700">0.00</span> g
         </div>
       </div>
+    </div>
+  </div>
 
-    <!-- GPS Trace Track Map -->
-    <div class="ck-section ck-gps-map">
-      <div class="ck-section-hdr">
-        <span class="ck-hdr-dash">—</span>
-        TRACK MAP — DRAWN LIVE DURING A RACE
+  <!-- GPS trace -->
+  <div class="grid-stack-item" gs-id="gpsmap" gs-x="3" gs-y="3" gs-w="5" gs-h="4" gs-min-w="3" gs-min-h="3">
+    <div class="grid-stack-item-content">
+      <div class="tile-hdr">
+        <span class="tile-title">Track Trace — Drawn Live</span>
+        <button class="tile-hide no-drag" onclick="hideWidget('gpsmap')" title="Hide">✕</button>
       </div>
-      <div class="ck-map-canvas-wrap">
-        <canvas id="gps-trace-canvas"></canvas>
+      <div class="tile-body" data-wid="gpsmap">
+        <div class="ck-map-canvas-wrap"><canvas id="gps-trace-canvas"></canvas></div>
       </div>
     </div>
   </div>
 
-  <!-- ── Telemetry ── -->
-  <div id="sub-telemetry" class="sub-view">
-    <div class="tel-row-label">SUSPENSION TRAVEL (mm)</div>
-    <div class="tel-grid-4">
-      <div class="tel-card"><div class="tel-label">FL</div><div class="tel-big-val" id="tel-susp-fl">—</div><div class="tel-bar-h"><div class="tel-bar-fill" id="tel-susp-bar-fl" style="background:var(--primary)"></div></div></div>
-      <div class="tel-card"><div class="tel-label">FR</div><div class="tel-big-val" id="tel-susp-fr">—</div><div class="tel-bar-h"><div class="tel-bar-fill" id="tel-susp-bar-fr" style="background:var(--primary)"></div></div></div>
-      <div class="tel-card"><div class="tel-label">RL</div><div class="tel-big-val" id="tel-susp-rl">—</div><div class="tel-bar-h"><div class="tel-bar-fill" id="tel-susp-bar-rl" style="background:var(--primary)"></div></div></div>
-      <div class="tel-card"><div class="tel-label">RR</div><div class="tel-big-val" id="tel-susp-rr">—</div><div class="tel-bar-h"><div class="tel-bar-fill" id="tel-susp-bar-rr" style="background:var(--primary)"></div></div></div>
-    </div>
-    <div class="tel-row-label">WHEEL RPM</div>
-    <div class="tel-grid-4">
-      <div class="tel-card"><div class="tel-label">FL</div><div class="tel-big-val" id="tel-wrpm-fl">—</div><div class="tel-bar-h"><div class="tel-bar-fill" id="tel-wrpm-bar-fl" style="background:var(--orange)"></div></div></div>
-      <div class="tel-card"><div class="tel-label">FR</div><div class="tel-big-val" id="tel-wrpm-fr">—</div><div class="tel-bar-h"><div class="tel-bar-fill" id="tel-wrpm-bar-fr" style="background:var(--orange)"></div></div></div>
-      <div class="tel-card"><div class="tel-label">RL</div><div class="tel-big-val" id="tel-wrpm-rl">—</div><div class="tel-bar-h"><div class="tel-bar-fill" id="tel-wrpm-bar-rl" style="background:var(--orange)"></div></div></div>
-      <div class="tel-card"><div class="tel-label">RR</div><div class="tel-big-val" id="tel-wrpm-rr">—</div><div class="tel-bar-h"><div class="tel-bar-fill" id="tel-wrpm-bar-rr" style="background:var(--orange)"></div></div></div>
-    </div>
-    <div class="tel-row-label">ENGINE</div>
-    <div class="tel-grid-2">
-      <div class="tel-card">
-        <div class="tel-label">POWER</div>
-        <div class="tel-bar-h"><div class="tel-bar-fill" id="tel-power-bar" style="background:var(--green)"></div></div>
-        <div class="tel-big-val"><span id="tel-power">—</span> <span class="tel-unit">kW</span></div>
+  <!-- Lap history -->
+  <div class="grid-stack-item" gs-id="history" gs-x="8" gs-y="3" gs-w="4" gs-h="4" gs-min-w="3" gs-min-h="2">
+    <div class="grid-stack-item-content">
+      <div class="tile-hdr">
+        <span class="tile-title">Lap History</span>
+        <button class="tile-hide no-drag" onclick="hideWidget('history')" title="Hide">✕</button>
       </div>
-      <div class="tel-card">
-        <div class="tel-label">TORQUE</div>
-        <div class="tel-bar-h"><div class="tel-bar-fill" id="tel-torque-bar" style="background:var(--gold)"></div></div>
-        <div class="tel-big-val"><span id="tel-torque">—</span> <span class="tel-unit">Nm</span></div>
+      <div class="tile-body" data-wid="history">
+        <div class="history-header">
+          <div class="h-lap">#</div>
+          <div class="h-sess">SESSION</div>
+          <div>LAP TIME</div>
+          <div>MAX SPD</div>
+          <div>FLAGS</div>
+        </div>
+        <div id="lap-rows"></div>
       </div>
-    </div>
-    <div class="tel-row-label">TIRE SLIP RATIO</div>
-    <div class="tel-grid-4">
-      <div class="tel-card"><div class="tel-label">FL</div><div class="tel-big-val" id="tel-slipratio-fl">—</div><div class="tel-bar-h"><div class="tel-bar-fill" id="tel-slipratio-bar-fl"></div></div></div>
-      <div class="tel-card"><div class="tel-label">FR</div><div class="tel-big-val" id="tel-slipratio-fr">—</div><div class="tel-bar-h"><div class="tel-bar-fill" id="tel-slipratio-bar-fr"></div></div></div>
-      <div class="tel-card"><div class="tel-label">RL</div><div class="tel-big-val" id="tel-slipratio-rl">—</div><div class="tel-bar-h"><div class="tel-bar-fill" id="tel-slipratio-bar-rl"></div></div></div>
-      <div class="tel-card"><div class="tel-label">RR</div><div class="tel-big-val" id="tel-slipratio-rr">—</div><div class="tel-bar-h"><div class="tel-bar-fill" id="tel-slipratio-bar-rr"></div></div></div>
-    </div>
-    <div class="tel-car-info">
-      <div class="tel-ci-item"><div class="tel-ci-val" id="tel-car-pi">—</div><div class="tel-ci-lbl">CAR PI</div></div>
-      <div class="tel-ci-item"><div class="tel-ci-val" id="tel-car-cyl">—</div><div class="tel-ci-lbl">CYLINDERS</div></div>
     </div>
   </div>
 
-  <!-- ── Map ── -->
-  <div id="sub-map" class="sub-view">
-    <div class="map-overlay-bar">
-      <span>POS <span class="map-overlay-val" id="map-race-pos">—</span></span>
-      <span>DIST <span class="map-overlay-val" id="map-distance">—</span></span>
-      <span>LAP <span class="map-overlay-val" id="map-cur-lap">—:——.———</span></span>
-    </div>
-    <div id="track-canvas-wrap" style="height:65vh;min-height:380px;position:relative;width:100%;border-radius:4px;overflow:hidden;background:var(--bg)">
-      <div id="track-map"></div>
-    </div>
-    <div class="track-legend">
-      <span>slow</span>
-      <div class="track-legend-bar"></div>
-      <span>fast</span>
-    </div>
-  </div>
-
-  <!-- ── History ── -->
-  <div id="sub-history" class="sub-view">
-    <div class="card card-history" style="min-height:300px;border-radius:0;border-left:none;border-right:none;border-bottom:none">
-      <div class="history-header">
-        <div class="h-lap">#</div>
-        <div class="h-sess">SESSION</div>
-        <div>LAP TIME</div>
-        <div>MAX SPEED</div>
-        <div>FLAGS</div>
+  <!-- Suspension -->
+  <div class="grid-stack-item" gs-id="susp" gs-x="0" gs-y="7" gs-w="6" gs-h="2" gs-min-w="3" gs-min-h="2">
+    <div class="grid-stack-item-content">
+      <div class="tile-hdr">
+        <span class="tile-title">Suspension Travel (mm)</span>
+        <button class="tile-hide no-drag" onclick="hideWidget('susp')" title="Hide">✕</button>
       </div>
-      <div id="lap-rows"></div>
+      <div class="tile-body" data-wid="susp">
+        <div class="tel-grid-4">
+          <div class="tel-card"><div class="tel-label">FL</div><div class="tel-big-val" id="tel-susp-fl">—</div><div class="tel-bar-h"><div class="tel-bar-fill" id="tel-susp-bar-fl" style="background:var(--primary)"></div></div></div>
+          <div class="tel-card"><div class="tel-label">FR</div><div class="tel-big-val" id="tel-susp-fr">—</div><div class="tel-bar-h"><div class="tel-bar-fill" id="tel-susp-bar-fr" style="background:var(--primary)"></div></div></div>
+          <div class="tel-card"><div class="tel-label">RL</div><div class="tel-big-val" id="tel-susp-rl">—</div><div class="tel-bar-h"><div class="tel-bar-fill" id="tel-susp-bar-rl" style="background:var(--primary)"></div></div></div>
+          <div class="tel-card"><div class="tel-label">RR</div><div class="tel-big-val" id="tel-susp-rr">—</div><div class="tel-bar-h"><div class="tel-bar-fill" id="tel-susp-bar-rr" style="background:var(--primary)"></div></div></div>
+        </div>
+      </div>
     </div>
   </div>
 
-</div><!-- end #sub-panel -->
-</div><!-- end #dash -->
+  <!-- Wheel RPM -->
+  <div class="grid-stack-item" gs-id="wheelrpm" gs-x="6" gs-y="7" gs-w="6" gs-h="2" gs-min-w="3" gs-min-h="2">
+    <div class="grid-stack-item-content">
+      <div class="tile-hdr">
+        <span class="tile-title">Wheel RPM</span>
+        <button class="tile-hide no-drag" onclick="hideWidget('wheelrpm')" title="Hide">✕</button>
+      </div>
+      <div class="tile-body" data-wid="wheelrpm">
+        <div class="tel-grid-4">
+          <div class="tel-card"><div class="tel-label">FL</div><div class="tel-big-val" id="tel-wrpm-fl">—</div><div class="tel-bar-h"><div class="tel-bar-fill" id="tel-wrpm-bar-fl" style="background:var(--orange)"></div></div></div>
+          <div class="tel-card"><div class="tel-label">FR</div><div class="tel-big-val" id="tel-wrpm-fr">—</div><div class="tel-bar-h"><div class="tel-bar-fill" id="tel-wrpm-bar-fr" style="background:var(--orange)"></div></div></div>
+          <div class="tel-card"><div class="tel-label">RL</div><div class="tel-big-val" id="tel-wrpm-rl">—</div><div class="tel-bar-h"><div class="tel-bar-fill" id="tel-wrpm-bar-rl" style="background:var(--orange)"></div></div></div>
+          <div class="tel-card"><div class="tel-label">RR</div><div class="tel-big-val" id="tel-wrpm-rr">—</div><div class="tel-bar-h"><div class="tel-bar-fill" id="tel-wrpm-bar-rr" style="background:var(--orange)"></div></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tyre slip ratio -->
+  <div class="grid-stack-item" gs-id="slipratio" gs-x="0" gs-y="9" gs-w="6" gs-h="2" gs-min-w="3" gs-min-h="2">
+    <div class="grid-stack-item-content">
+      <div class="tile-hdr">
+        <span class="tile-title">Tyre Slip Ratio</span>
+        <button class="tile-hide no-drag" onclick="hideWidget('slipratio')" title="Hide">✕</button>
+      </div>
+      <div class="tile-body" data-wid="slipratio">
+        <div class="tel-grid-4">
+          <div class="tel-card"><div class="tel-label">FL</div><div class="tel-big-val" id="tel-slipratio-fl">—</div><div class="tel-bar-h"><div class="tel-bar-fill" id="tel-slipratio-bar-fl"></div></div></div>
+          <div class="tel-card"><div class="tel-label">FR</div><div class="tel-big-val" id="tel-slipratio-fr">—</div><div class="tel-bar-h"><div class="tel-bar-fill" id="tel-slipratio-bar-fr"></div></div></div>
+          <div class="tel-card"><div class="tel-label">RL</div><div class="tel-big-val" id="tel-slipratio-rl">—</div><div class="tel-bar-h"><div class="tel-bar-fill" id="tel-slipratio-bar-rl"></div></div></div>
+          <div class="tel-card"><div class="tel-label">RR</div><div class="tel-big-val" id="tel-slipratio-rr">—</div><div class="tel-bar-h"><div class="tel-bar-fill" id="tel-slipratio-bar-rr"></div></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Engine -->
+  <div class="grid-stack-item" gs-id="engine" gs-x="6" gs-y="9" gs-w="3" gs-h="2" gs-min-w="2" gs-min-h="2">
+    <div class="grid-stack-item-content">
+      <div class="tile-hdr">
+        <span class="tile-title">Engine</span>
+        <button class="tile-hide no-drag" onclick="hideWidget('engine')" title="Hide">✕</button>
+      </div>
+      <div class="tile-body" data-wid="engine">
+        <div class="tel-grid-2">
+          <div class="tel-card">
+            <div class="tel-label">POWER</div>
+            <div class="tel-bar-h"><div class="tel-bar-fill" id="tel-power-bar" style="background:var(--green)"></div></div>
+            <div class="tel-big-val"><span id="tel-power">—</span> <span class="tel-unit">kW</span></div>
+          </div>
+          <div class="tel-card">
+            <div class="tel-label">TORQUE</div>
+            <div class="tel-bar-h"><div class="tel-bar-fill" id="tel-torque-bar" style="background:var(--gold)"></div></div>
+            <div class="tel-big-val"><span id="tel-torque">—</span> <span class="tel-unit">Nm</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Car info -->
+  <div class="grid-stack-item" gs-id="carinfo" gs-x="9" gs-y="9" gs-w="3" gs-h="2" gs-min-w="2" gs-min-h="1">
+    <div class="grid-stack-item-content">
+      <div class="tile-hdr">
+        <span class="tile-title">Car Info</span>
+        <button class="tile-hide no-drag" onclick="hideWidget('carinfo')" title="Hide">✕</button>
+      </div>
+      <div class="tile-body" data-wid="carinfo">
+        <div class="tel-car-info">
+          <div class="tel-ci-item"><div class="tel-ci-val" id="tel-car-pi">—</div><div class="tel-ci-lbl">CAR PI</div></div>
+          <div class="tel-ci-item"><div class="tel-ci-val" id="tel-car-cyl">—</div><div class="tel-ci-lbl">CYLINDERS</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MapGenie map -->
+  <div class="grid-stack-item" gs-id="trackmap" gs-x="0" gs-y="11" gs-w="12" gs-h="5" gs-min-w="4" gs-min-h="3">
+    <div class="grid-stack-item-content">
+      <div class="tile-hdr">
+        <span class="tile-title">MapGenie Live Map</span>
+        <button class="tile-hide no-drag" onclick="hideWidget('trackmap')" title="Hide">✕</button>
+      </div>
+      <div class="tile-body" data-wid="trackmap">
+        <div class="map-overlay-bar">
+          <span>POS <span class="map-overlay-val" id="map-race-pos">—</span></span>
+          <span>DIST <span class="map-overlay-val" id="map-distance">—</span></span>
+          <span>LAP <span class="map-overlay-val" id="map-cur-lap">—:——.———</span></span>
+        </div>
+        <div id="track-canvas-wrap"><div id="track-map"></div></div>
+        <div class="track-legend">
+          <span>slow</span><div class="track-legend-bar"></div><span>fast</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- end .grid-stack -->
 
 <!-- Offline overlay -->
 <div id="offline-overlay">
@@ -644,12 +728,34 @@ const G_CENTER    = 90;
 const MAX_TRAIL   = 60;
 const LAPS_POLL   = 4000;
 const HOLD_MS     = 5 * 60 * 1000;
+const LAYOUT_KEY  = 'pitlane-layout-v1';
 
-// Shift advice thresholds
-const SHIFT_UP    = 0.82;
-const SHIFT_UP_H  = 0.78;
-const SHIFT_DN    = 0.42;
-const SHIFT_DN_H  = 0.46;
+// ── Widget registry — id must match gs-id in the markup ────────────────────────
+const WIDGETS = [
+  { id: 'tacho',     title: 'Tachometer'        },
+  { id: 'laptimes',  title: 'Lap Times'         },
+  { id: 'inputs',    title: 'Inputs'            },
+  { id: 'tyres',     title: 'Tyre Grip'         },
+  { id: 'friction',  title: 'Friction Circle'   },
+  { id: 'gpsmap',    title: 'Track Trace'       },
+  { id: 'history',   title: 'Lap History'       },
+  { id: 'susp',      title: 'Suspension'        },
+  { id: 'wheelrpm',  title: 'Wheel RPM'         },
+  { id: 'slipratio', title: 'Tyre Slip Ratio'   },
+  { id: 'engine',    title: 'Engine'            },
+  { id: 'carinfo',   title: 'Car Info'          },
+  { id: 'trackmap',  title: 'MapGenie Live Map' },
+];
+
+// Captured from the markup before any saved layout is applied, so RESET works.
+const DEFAULT_LAYOUT = WIDGETS.map(w => {
+  const el = document.querySelector(`[gs-id="${w.id}"]`);
+  return {
+    id: w.id,
+    x: +el.getAttribute('gs-x'), y: +el.getAttribute('gs-y'),
+    w: +el.getAttribute('gs-w'), h: +el.getAttribute('gs-h'),
+  };
+});
 
 // ── EMA smoothing ──────────────────────────────────────────────────────────────
 const EMA = {
@@ -679,10 +785,11 @@ function smooth(key, raw) {
 // ── State ──────────────────────────────────────────────────────────────────────
 let gTrail       = [];
 let bestLapSeen  = Infinity;
-let shiftUp      = false;
-let shiftDn      = false;
 let tachoMaxGear = 6;
-let currentSubView = localStorage.getItem('pitlane-sub') || 'cockpit';
+let grid          = null;
+let editing       = false;
+let hiddenWidgets = new Set();
+let saveTimer     = null;
 
 // ── MapGenie live map ─────────────────────────────────────────────────────────
 const MAP_CAL = {
@@ -705,11 +812,12 @@ let trailPrevLap = [];
 let trailLastLap = -1;
 let trailRAF     = false;
 
-// ── GPS trace (cockpit map) ───────────────────────────────────────────────────
+// ── GPS trace ─────────────────────────────────────────────────────────────────
 let rawTrail     = [];
 let rawTrailPrev = [];
 let rawTrailLast = -1;
 let gpsRAF       = false;
+let gpsW = 400, gpsH = 200;
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 function fmtTime(s) {
@@ -720,17 +828,204 @@ function fmtTime(s) {
   return `${m}:${String(ss).padStart(2,'0')}.${String(ms).padStart(3,'0')}`;
 }
 function clamp(v, lo, hi) { return Math.min(Math.max(v, lo), hi); }
+function isVisible(id) { return !hiddenWidgets.has(id); }
+function tileBody(id) { return document.querySelector(`.tile-body[data-wid="${id}"]`); }
 
-// ── Tachometer canvas ─────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+// Layout — edit mode, persistence, widget visibility
+// ══════════════════════════════════════════════════════════════════════════════
+function initGrid() {
+  grid = GridStack.init({
+    column: 12,
+    cellHeight: 72,
+    margin: 4,
+    float: true,              // respect exact placement; don't auto-compact upward
+    staticGrid: true,         // locked until the user enters edit mode
+    animate: true,
+    resizable: { handles: 'all' },
+    draggable: { cancel: '.no-drag' },
+  });
+
+  grid.on('change', () => { scheduleSave(); refreshCanvases(); });
+  grid.on('resizestop', refreshCanvases);
+}
+
+function toggleEdit() {
+  editing = !editing;
+  document.body.classList.toggle('editing', editing);
+  document.getElementById('edit-toggle').classList.toggle('on', editing);
+  document.getElementById('edit-toggle').textContent = editing ? 'EXIT EDIT' : 'EDIT LAYOUT';
+  grid.setStatic(!editing);
+  if (!editing) {
+    document.getElementById('picker').classList.remove('open');
+    saveLayout();
+  }
+  refreshCanvases();
+}
+
+function togglePicker() {
+  document.getElementById('picker').classList.toggle('open');
+}
+
+function refreshPicker() {
+  const p = document.getElementById('picker');
+  p.innerHTML = WIDGETS.map(w => {
+    const on = isVisible(w.id);
+    return `<label class="picker-row${on ? ' on' : ''}">
+      <input type="checkbox" ${on ? 'checked' : ''} onchange="setWidgetVisible('${w.id}', this.checked)">
+      ${w.title}
+    </label>`;
+  }).join('');
+}
+
+function hideWidget(id) { setWidgetVisible(id, false); }
+
+function setWidgetVisible(id, visible) {
+  const el = document.querySelector(`[gs-id="${id}"]`);
+  if (!el) return;
+
+  if (visible) {
+    hiddenWidgets.delete(id);
+    el.style.display = '';
+    if (!el.gridstackNode) grid.makeWidget(el);
+  } else {
+    hiddenWidgets.add(id);
+    if (el.gridstackNode) grid.removeWidget(el, false);  // false = keep the DOM node
+    el.style.display = 'none';
+  }
+  refreshPicker();
+  scheduleSave();
+  refreshCanvases();
+}
+
+function scheduleSave() {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(saveLayout, 600);
+}
+
+function saveLayout() {
+  if (!grid) return;
+  const nodes = grid.save(false);   // false = positions only, no innerHTML
+  const payload = {
+    layout: nodes.filter(n => n.id).map(n => ({ id: n.id, x: n.x, y: n.y, w: n.w, h: n.h })),
+    hidden: [...hiddenWidgets],
+  };
+  try { localStorage.setItem(LAYOUT_KEY, JSON.stringify(payload)); } catch (_) {}
+  fetch('/api/layout', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  }).then(() => flashSaved()).catch(() => {});
+}
+
+function flashSaved() {
+  const f = document.getElementById('save-flash');
+  if (!f) return;
+  f.classList.add('show');
+  setTimeout(() => f.classList.remove('show'), 1200);
+}
+
+function applyLayout(data) {
+  if (!data || !Array.isArray(data.layout)) return;
+  hiddenWidgets = new Set(data.hidden || []);
+
+  grid.batchUpdate();
+  for (const w of WIDGETS) {
+    const el = document.querySelector(`[gs-id="${w.id}"]`);
+    if (!el) continue;
+    const hidden = hiddenWidgets.has(w.id);
+    if (hidden) {
+      if (el.gridstackNode) grid.removeWidget(el, false);
+      el.style.display = 'none';
+    } else {
+      el.style.display = '';
+      if (!el.gridstackNode) grid.makeWidget(el);
+    }
+  }
+  for (const item of data.layout) {
+    if (hiddenWidgets.has(item.id)) continue;
+    const el = document.querySelector(`[gs-id="${item.id}"]`);
+    if (el && el.gridstackNode) {
+      grid.update(el, { x: item.x, y: item.y, w: item.w, h: item.h });
+    }
+  }
+  grid.commit();
+
+  refreshPicker();
+  refreshCanvases();
+}
+
+async function loadLayout() {
+  // localStorage first for an instant first paint...
+  try {
+    const cached = localStorage.getItem(LAYOUT_KEY);
+    if (cached) applyLayout(JSON.parse(cached));
+  } catch (_) {}
+
+  // ...then the server, which is the source of truth across machines.
+  try {
+    const res    = await fetch('/api/layout');
+    const server = await res.json();
+    if (server && Array.isArray(server.layout) && server.layout.length) {
+      applyLayout(server);
+      try { localStorage.setItem(LAYOUT_KEY, JSON.stringify(server)); } catch (_) {}
+    }
+  } catch (_) {}
+}
+
+async function resetLayout() {
+  try { localStorage.removeItem(LAYOUT_KEY); } catch (_) {}
+  try { await fetch('/api/layout', { method: 'DELETE' }); } catch (_) {}
+  applyLayout({ layout: DEFAULT_LAYOUT, hidden: [] });
+  saveLayout();
+}
+
+// ── Canvas / map resize plumbing ──────────────────────────────────────────────
+function refreshCanvases() {
+  requestAnimationFrame(() => {
+    sizeTachoCanvas();
+    drawTacho(EMA.rpm.v, lastMaxRpm, lastGear);
+    sizeGpsCanvas();
+    drawGpsTrace();
+    if (gMap && isVisible('trackmap')) { gMap.invalidateSize(); _syncTrailCanvas(); }
+  });
+}
+
+const tileObserver = new ResizeObserver(entries => {
+  for (const e of entries) {
+    const id = e.target.dataset.wid;
+    if (id === 'tacho')    { sizeTachoCanvas(); drawTacho(EMA.rpm.v, lastMaxRpm, lastGear); }
+    else if (id === 'gpsmap')   { sizeGpsCanvas(); drawGpsTrace(); }
+    else if (id === 'trackmap' && gMap) { gMap.invalidateSize(); _syncTrailCanvas(); }
+  }
+});
+
+// ── Tachometer ────────────────────────────────────────────────────────────────
 const tachoCanvas = document.getElementById('tacho-canvas');
 const tachoCtx    = tachoCanvas ? tachoCanvas.getContext('2d') : null;
+let tachoSize  = 160;
+let lastMaxRpm = 8500;
+let lastGear   = 0;
+
+function sizeTachoCanvas() {
+  const body = tileBody('tacho');
+  if (!body || !tachoCanvas) return;
+  const bw = body.clientWidth, bh = body.clientHeight;
+  if (bw < 10 || bh < 10) return;
+  // Leave room for the dot row above and the speed panel to the right.
+  const size = clamp(Math.min(bh - 20, bw * 0.52), 70, 340);
+  tachoSize = size;
+  const dpr = window.devicePixelRatio || 1;
+  tachoCanvas.width  = Math.round(size * dpr);
+  tachoCanvas.height = Math.round(size * dpr);
+  tachoCanvas.style.width  = size + 'px';
+  tachoCanvas.style.height = size + 'px';
+}
 
 function updateGearDots(gear) {
   const el = document.getElementById('tacho-dots');
   if (!el) return;
-  if (gear > 0 && gear !== 10 && gear > tachoMaxGear) {
-    tachoMaxGear = gear;
-  }
+  if (gear > 0 && gear !== 10 && gear > tachoMaxGear) tachoMaxGear = gear;
   if (el.children.length !== tachoMaxGear) {
     el.innerHTML = '';
     for (let i = 1; i <= tachoMaxGear; i++) {
@@ -750,14 +1045,18 @@ function updateGearDots(gear) {
 function drawTacho(rpm, maxRpm, gear) {
   if (!tachoCtx) return;
   const ctx = tachoCtx;
-  const W = tachoCanvas.width, H = tachoCanvas.height;
-  const cx = W / 2, cy = H / 2;
-  const R = 66, SW = 11;
+  const dpr = window.devicePixelRatio || 1;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+  // All geometry scales off the canvas size so the dial survives any tile size.
+  const S  = tachoSize;
+  const cx = S / 2, cy = S / 2;
+  const R  = S * 0.41, SW = S * 0.069;
   const DEG = Math.PI / 180;
   const startA = 135 * DEG;
   const totalA = 270 * DEG;
 
-  ctx.clearRect(0, 0, W, H);
+  ctx.clearRect(0, 0, S, S);
 
   // Background arc
   ctx.beginPath();
@@ -766,7 +1065,7 @@ function drawTacho(rpm, maxRpm, gear) {
   ctx.lineWidth = SW; ctx.lineCap = 'butt';
   ctx.stroke();
 
-  // Redline zone background (last 12%)
+  // Redline zone (last 12%)
   ctx.beginPath();
   ctx.arc(cx, cy, R, startA + 0.88 * totalA, startA + totalA);
   ctx.strokeStyle = 'rgba(255,59,59,0.2)';
@@ -776,22 +1075,20 @@ function drawTacho(rpm, maxRpm, gear) {
   // RPM fill
   const ratio = maxRpm > 0 ? clamp(rpm / maxRpm, 0, 1) : 0;
   if (ratio > 0.005) {
-    const fillEnd = startA + ratio * totalA;
-    const col = ratio > 0.90 ? '#ff3b3b'
-              : ratio > 0.80 ? '#ffd700'
-              : '#00d4ff';
+    const col = ratio > 0.90 ? '#ff3b3b' : ratio > 0.80 ? '#ffd700' : '#00d4ff';
     ctx.beginPath();
-    ctx.arc(cx, cy, R, startA, fillEnd);
+    ctx.arc(cx, cy, R, startA, startA + ratio * totalA);
     ctx.strokeStyle = col;
     ctx.lineWidth = SW; ctx.lineCap = 'round';
     ctx.stroke();
   }
 
-  // Tick marks
+  // Ticks
+  const tickFont = Math.max(7, S * 0.0625);
   for (let i = 0; i <= 10; i++) {
     const angle = startA + (i / 10) * totalA;
-    const r1 = R - SW / 2 - 2;
-    const r2 = r1 - (i % 2 === 0 ? 12 : 7);
+    const r1 = R - SW / 2 - S * 0.0125;
+    const r2 = r1 - (i % 2 === 0 ? S * 0.075 : S * 0.044);
     ctx.beginPath();
     ctx.moveTo(cx + r1 * Math.cos(angle), cy + r1 * Math.sin(angle));
     ctx.lineTo(cx + r2 * Math.cos(angle), cy + r2 * Math.sin(angle));
@@ -799,42 +1096,44 @@ function drawTacho(rpm, maxRpm, gear) {
     ctx.lineWidth = i % 2 === 0 ? 2 : 1;
     ctx.lineCap = 'butt';
     ctx.stroke();
-    if (i % 2 === 0) {
-      const lr = r1 - 19;
+    if (i % 2 === 0 && S > 110) {
+      const lr = r1 - S * 0.119;
       ctx.fillStyle = '#44446a';
-      ctx.font = '10px monospace';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
+      ctx.font = `${tickFont}px monospace`;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.fillText(String(i), cx + lr * Math.cos(angle), cy + lr * Math.sin(angle));
     }
   }
 
-  // Gear (center)
+  // Gear (centre)
   const gearText  = gear === 0 ? 'N' : gear === 10 ? 'R' : String(gear);
   const gearColor = gear === 0 ? '#55558a' : gear === 10 ? '#ff6b00' : '#00d4ff';
   ctx.fillStyle = gearColor;
-  ctx.font = 'bold 50px Courier New, monospace';
+  ctx.font = `bold ${S * 0.31}px Courier New, monospace`;
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.fillText(gearText, cx, cy - 6);
+  ctx.fillText(gearText, cx, cy - S * 0.0375);
 
   // RPM readout
   ctx.fillStyle = '#55558a';
-  ctx.font = '9px monospace';
-  ctx.fillText(Math.round(rpm).toLocaleString() + ' RPM', cx, cy + 22);
+  ctx.font = `${Math.max(8, S * 0.056)}px monospace`;
+  ctx.fillText(Math.round(rpm).toLocaleString() + ' RPM', cx, cy + S * 0.1375);
 }
 
 function updateTacho(speed, rpm, maxRpm, gear, powerKw, boostPsi) {
-  drawTacho(rpm, maxRpm, gear);
-  updateGearDots(gear);
-  const s = document.getElementById('tacho-speed');
-  if (s) s.textContent = Math.round(speed);
-  const k = document.getElementById('tacho-kw');
-  if (k) k.textContent = Math.round(powerKw);
-  const p = document.getElementById('tacho-psi');
-  if (p) p.textContent = boostPsi.toFixed(1);
+  lastMaxRpm = maxRpm; lastGear = gear;
+  if (isVisible('tacho')) {
+    drawTacho(rpm, maxRpm, gear);
+    updateGearDots(gear);
+    const s = document.getElementById('tacho-speed');
+    if (s) s.textContent = Math.round(speed);
+    const k = document.getElementById('tacho-kw');
+    if (k) k.textContent = Math.round(powerKw);
+    const p = document.getElementById('tacho-psi');
+    if (p) p.textContent = boostPsi.toFixed(1);
+  }
 }
 
-// ── Combined Lap Times ────────────────────────────────────────────────────────
+// ── Lap times ─────────────────────────────────────────────────────────────────
 function updateLapTimes(curLap, bestLap, lastLap, lapNum, racePos) {
   const curEl = document.getElementById('cur-lap');
   if (curEl) curEl.textContent = fmtTime(curLap);
@@ -858,12 +1157,10 @@ function updateLapTimes(curLap, bestLap, lastLap, lapNum, racePos) {
     }
   }
 
-  // Delta bar (current vs best)
   const bar = document.getElementById('lp-delta-bar');
   if (bar && bestLap > 0.5 && curLap > 0) {
-    const delta  = curLap - bestLap;
-    const maxD   = 15;
-    const frac   = clamp(Math.abs(delta) / maxD, 0, 0.5);
+    const delta = curLap - bestLap;
+    const frac  = clamp(Math.abs(delta) / 15, 0, 0.5);
     if (delta >= 0) {
       bar.style.left       = '50%';
       bar.style.width      = (frac * 100) + '%';
@@ -885,7 +1182,7 @@ function updateGForce(gLat, gLon) {
   if (gTrail.length > MAX_TRAIL) gTrail.shift();
 
   const trailEl = document.getElementById('g-trail');
-  if (trailEl) {
+  if (trailEl && isVisible('friction')) {
     trailEl.innerHTML = '';
     gTrail.forEach((pt, i) => {
       const c = document.createElementNS('http://www.w3.org/2000/svg','circle');
@@ -902,9 +1199,8 @@ function updateGForce(gLat, gLon) {
   if (latEl) latEl.textContent = gLat.toFixed(2);
   const lonEl = document.getElementById('g-lon-val');
   if (lonEl) lonEl.textContent = gLon.toFixed(2);
-  const total = Math.sqrt(gLat * gLat + gLon * gLon);
   const totEl = document.getElementById('g-total-val');
-  if (totEl) totEl.textContent = total.toFixed(2);
+  if (totEl) totEl.textContent = Math.sqrt(gLat * gLat + gLon * gLon).toFixed(2);
 }
 
 // ── Inputs ─────────────────────────────────────────────────────────────────────
@@ -924,9 +1220,8 @@ function updateInputs(thr, brk, boost, fuel, steer) {
   const s = clamp(steer ?? 0, -1, 1);
   const steerBar = document.getElementById('bar-steer');
   if (steerBar) {
-    const halfPct = Math.abs(s) * 50;
     steerBar.style.left  = s >= 0 ? '50%' : (50 + s * 50) + '%';
-    steerBar.style.width = halfPct + '%';
+    steerBar.style.width = (Math.abs(s) * 50) + '%';
   }
   const steerLbl = document.getElementById('pct-steer');
   if (steerLbl) {
@@ -935,10 +1230,10 @@ function updateInputs(thr, brk, boost, fuel, steer) {
   }
 }
 
-// ── Tire Grip (cockpit) ────────────────────────────────────────────────────────
+// ── Tyre grip ──────────────────────────────────────────────────────────────────
 function gripColor(slip) {
-  if (slip > 0.8) return '#ff3b3b';
-  if (slip > 0.5) return '#ffd700';
+  if (slip > 0.8)  return '#ff3b3b';
+  if (slip > 0.5)  return '#ffd700';
   if (slip > 0.25) return '#ff6b00';
   if (slip > 0.05) return '#00ff87';
   return '#55558a';
@@ -949,13 +1244,9 @@ function updateTireGrip(pos, tempF, slip, susNorm) {
   const col   = gripColor(slip);
 
   const oval = document.getElementById(`grip-oval-${pos}`);
-  if (oval) {
-    oval.style.borderColor = col;
-    oval.style.background  = col + '22';
-  }
+  if (oval) { oval.style.borderColor = col; oval.style.background = col + '22'; }
   const val = document.getElementById(`grip-val-${pos}`);
   if (val) { val.textContent = slip.toFixed(1); val.style.color = col; }
-
   const temp = document.getElementById(`grip-temp-${pos}`);
   if (temp) temp.textContent = tempC != null ? `${tempC}°` : '—°';
 
@@ -974,15 +1265,10 @@ function updateHandlingState(sFL, sFR, sRL, sRR) {
   const el    = document.getElementById('grip-handling');
   if (!el) return;
   let text, col;
-  if (front < 0.06 && rear < 0.06) {
-    text = 'NEUTRAL'; col = 'var(--muted)';
-  } else if (diff > 0.15) {
-    text = 'UNDERSTEER'; col = 'var(--orange)';
-  } else if (diff < -0.15) {
-    text = 'OVERSTEER'; col = 'var(--red)';
-  } else {
-    text = 'NEUTRAL'; col = 'var(--green)';
-  }
+  if (front < 0.06 && rear < 0.06) { text = 'NEUTRAL';    col = 'var(--muted)';  }
+  else if (diff >  0.15)           { text = 'UNDERSTEER'; col = 'var(--orange)'; }
+  else if (diff < -0.15)           { text = 'OVERSTEER';  col = 'var(--red)';    }
+  else                             { text = 'NEUTRAL';    col = 'var(--green)';  }
   el.textContent = text;
   el.style.color = col;
 }
@@ -997,7 +1283,7 @@ function worldToLatLng(x, z) {
 
 function initLeafletMap() {
   const mapDiv = document.getElementById('track-map');
-  if (!mapDiv || typeof L === 'undefined') return;
+  if (!mapDiv || typeof L === 'undefined' || gMap) return;
 
   gMap = L.map(mapDiv, {
     center:          L.latLng(MAP_CAL.latOffset, MAP_CAL.lngOffset),
@@ -1107,14 +1393,28 @@ function mapUpdate(worldX, worldZ, spd, lapNum) {
   trailCurLap.push({ lat: latlng.lat, lng: latlng.lng, spd });
   if (trailCurLap.length > TRAIL_MAX) trailCurLap.shift();
 
-  if (gMap) {
+  if (gMap && isVisible('trackmap')) {
     gMap.panTo(latlng, { animate: false, noMoveStart: true });
     gCarDiv.style.display = 'block';
     _scheduleTrailDraw();
   }
 }
 
-// ── GPS Trace Map (cockpit) ───────────────────────────────────────────────────
+// ── GPS trace ─────────────────────────────────────────────────────────────────
+function sizeGpsCanvas() {
+  const canvas = document.getElementById('gps-trace-canvas');
+  if (!canvas) return;
+  const wrap = canvas.parentElement;
+  const W = wrap.clientWidth, H = wrap.clientHeight;
+  if (W < 4 || H < 4) return;
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width  = Math.round(W * dpr);
+  canvas.height = Math.round(H * dpr);
+  canvas.style.width  = W + 'px';
+  canvas.style.height = H + 'px';
+  gpsW = W; gpsH = H;
+}
+
 function gpsMapUpdate(worldX, worldZ, spd, lapNum) {
   if (worldX === 0 && worldZ === 0) return;
   if (rawTrailLast >= 0 && lapNum > rawTrailLast) {
@@ -1125,7 +1425,7 @@ function gpsMapUpdate(worldX, worldZ, spd, lapNum) {
   rawTrail.push({ x: worldX, z: worldZ, spd });
   if (rawTrail.length > TRAIL_MAX) rawTrail.shift();
 
-  if (!gpsRAF && currentSubView === 'cockpit') {
+  if (!gpsRAF && isVisible('gpsmap')) {
     gpsRAF = true;
     requestAnimationFrame(() => { gpsRAF = false; drawGpsTrace(); });
   }
@@ -1133,13 +1433,11 @@ function gpsMapUpdate(worldX, worldZ, spd, lapNum) {
 
 function drawGpsTrace() {
   const canvas = document.getElementById('gps-trace-canvas');
-  if (!canvas) return;
-  const wrap = canvas.parentElement;
-  const W = wrap.offsetWidth || 400;
-  const H = wrap.offsetHeight || 200;
-  if (canvas.width !== W) canvas.width = W;
-  if (canvas.height !== H) canvas.height = H;
+  if (!canvas || !isVisible('gpsmap')) return;
   const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const W = gpsW, H = gpsH;
   ctx.clearRect(0, 0, W, H);
 
   const refTrail = rawTrailPrev.length > 20 ? rawTrailPrev : rawTrail;
@@ -1165,7 +1463,6 @@ function drawGpsTrace() {
 
   function toC(pt) { return { x: offX + (pt.x - minX) * scale, y: offZ + (pt.z - minZ) * scale }; }
 
-  // Ghost (previous lap)
   if (rawTrailPrev.length > 1) {
     ctx.beginPath();
     ctx.strokeStyle = 'rgba(80,80,140,0.5)';
@@ -1177,7 +1474,6 @@ function drawGpsTrace() {
     ctx.stroke();
   }
 
-  // Current lap — speed colored
   if (rawTrail.length > 1) {
     const maxSpd = Math.max(...rawTrail.map(p => p.spd), 1);
     ctx.lineWidth = 2.5; ctx.lineCap = 'round';
@@ -1189,7 +1485,6 @@ function drawGpsTrace() {
     }
   }
 
-  // Start marker
   const startPt = rawTrailPrev.length > 0 ? rawTrailPrev[0] : rawTrail[0];
   if (startPt) {
     const p = toC(startPt);
@@ -1199,7 +1494,6 @@ function drawGpsTrace() {
     ctx.fill(); ctx.shadowBlur = 0;
   }
 
-  // Car dot (current position)
   if (rawTrail.length > 0) {
     const p = toC(rawTrail[rawTrail.length - 1]);
     ctx.beginPath(); ctx.arc(p.x, p.y, 5, 0, Math.PI * 2);
@@ -1209,56 +1503,47 @@ function drawGpsTrace() {
   }
 }
 
-// ── Sub-view switching ────────────────────────────────────────────────────────
-function switchSubView(sub) {
-  currentSubView = sub;
-  localStorage.setItem('pitlane-sub', sub);
-  document.getElementById('sub-panel').dataset.sub = sub;
-  document.querySelectorAll('.sub-tab').forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.sub === sub);
-  });
-  if (sub === 'map') {
-    if (!gMap) setTimeout(initLeafletMap, 50);
-    else setTimeout(() => { gMap.invalidateSize(); _syncTrailCanvas(); }, 50);
-  }
-  if (sub === 'cockpit') {
-    setTimeout(drawGpsTrace, 50);
-  }
-}
-
-// ── Telemetry update ──────────────────────────────────────────────────────────
+// ── Telemetry tiles ───────────────────────────────────────────────────────────
 function updateTelemetry(d) {
-  for (const pos of ['fl','fr','rl','rr']) {
-    const mm = d[`susp_mm_${pos}`] ?? 0;
-    const el = document.getElementById(`tel-susp-${pos}`);
-    if (el) el.textContent = mm.toFixed(1);
-    const bar = document.getElementById(`tel-susp-bar-${pos}`);
-    if (bar) bar.style.width = clamp(Math.abs(mm) / 150 * 100, 0, 100) + '%';
+  if (isVisible('susp')) {
+    for (const pos of ['fl','fr','rl','rr']) {
+      const mm = d[`susp_mm_${pos}`] ?? 0;
+      const el = document.getElementById(`tel-susp-${pos}`);
+      if (el) el.textContent = mm.toFixed(1);
+      const bar = document.getElementById(`tel-susp-bar-${pos}`);
+      if (bar) bar.style.width = clamp(Math.abs(mm) / 150 * 100, 0, 100) + '%';
+    }
   }
-  for (const pos of ['fl','fr','rl','rr']) {
-    const rpm = d[`wheel_rpm_${pos}`] ?? 0;
-    const el = document.getElementById(`tel-wrpm-${pos}`);
-    if (el) el.textContent = Math.round(rpm);
-    const bar = document.getElementById(`tel-wrpm-bar-${pos}`);
-    if (bar) bar.style.width = clamp(rpm / 3000 * 100, 0, 100) + '%';
+  if (isVisible('wheelrpm')) {
+    for (const pos of ['fl','fr','rl','rr']) {
+      const rpm = d[`wheel_rpm_${pos}`] ?? 0;
+      const el = document.getElementById(`tel-wrpm-${pos}`);
+      if (el) el.textContent = Math.round(rpm);
+      const bar = document.getElementById(`tel-wrpm-bar-${pos}`);
+      if (bar) bar.style.width = clamp(rpm / 3000 * 100, 0, 100) + '%';
+    }
   }
-  const pwrEl = document.getElementById('tel-power');
-  if (pwrEl) pwrEl.textContent = (d.power_kw ?? 0).toFixed(0);
-  const pwrBar = document.getElementById('tel-power-bar');
-  if (pwrBar) pwrBar.style.width = clamp((d.power_kw ?? 0) / 900 * 100, 0, 100) + '%';
-  const tqEl = document.getElementById('tel-torque');
-  if (tqEl) tqEl.textContent = (d.torque_nm ?? 0).toFixed(0);
-  const tqBar = document.getElementById('tel-torque-bar');
-  if (tqBar) tqBar.style.width = clamp((d.torque_nm ?? 0) / 2000 * 100, 0, 100) + '%';
-
-  for (const pos of ['fl','fr','rl','rr']) {
-    const ratio = d[`tire_slip_ratio_${pos}`] ?? 0;
-    const el = document.getElementById(`tel-slipratio-${pos}`);
-    if (el) el.textContent = ratio.toFixed(3);
-    const bar = document.getElementById(`tel-slipratio-bar-${pos}`);
-    if (bar) {
-      bar.style.width = clamp(Math.abs(ratio) / 1.5 * 100, 0, 100) + '%';
-      bar.style.background = Math.abs(ratio) > 0.5 ? 'var(--red)' : Math.abs(ratio) > 0.2 ? 'var(--gold)' : 'var(--green)';
+  if (isVisible('engine')) {
+    const pwrEl = document.getElementById('tel-power');
+    if (pwrEl) pwrEl.textContent = (d.power_kw ?? 0).toFixed(0);
+    const pwrBar = document.getElementById('tel-power-bar');
+    if (pwrBar) pwrBar.style.width = clamp((d.power_kw ?? 0) / 900 * 100, 0, 100) + '%';
+    const tqEl = document.getElementById('tel-torque');
+    if (tqEl) tqEl.textContent = (d.torque_nm ?? 0).toFixed(0);
+    const tqBar = document.getElementById('tel-torque-bar');
+    if (tqBar) tqBar.style.width = clamp((d.torque_nm ?? 0) / 2000 * 100, 0, 100) + '%';
+  }
+  if (isVisible('slipratio')) {
+    for (const pos of ['fl','fr','rl','rr']) {
+      const ratio = d[`tire_slip_ratio_${pos}`] ?? 0;
+      const el = document.getElementById(`tel-slipratio-${pos}`);
+      if (el) el.textContent = ratio.toFixed(3);
+      const bar = document.getElementById(`tel-slipratio-bar-${pos}`);
+      if (bar) {
+        bar.style.width = clamp(Math.abs(ratio) / 1.5 * 100, 0, 100) + '%';
+        bar.style.background = Math.abs(ratio) > 0.5 ? 'var(--red)'
+                             : Math.abs(ratio) > 0.2 ? 'var(--gold)' : 'var(--green)';
+      }
     }
   }
   const piEl = document.getElementById('tel-car-pi');
@@ -1267,7 +1552,6 @@ function updateTelemetry(d) {
   if (cylEl && d.car_cylinders) cylEl.textContent = d.car_cylinders;
 }
 
-// ── Map overlay update ────────────────────────────────────────────────────────
 function updateMapOverlay(d) {
   const posEl = document.getElementById('map-race-pos');
   if (posEl) posEl.textContent = (d.race_position > 0) ? 'P' + d.race_position : '—';
@@ -1293,7 +1577,7 @@ function renderLaps(laps) {
     const isBest = lap.lap_time === best;
     row.className = `lap-row${isBest ? ' best-lap' : ''}`;
     const badges = [];
-    if (isBest)                  badges.push('<span class="lap-badge badge-best">BEST</span>');
+    if (isBest)                   badges.push('<span class="lap-badge badge-best">BEST</span>');
     if (lap.estimated === 'true') badges.push('<span class="lap-badge badge-est">EST</span>');
     if (lap.dirty === 'true')     badges.push('<span class="lap-badge badge-dirty">RWD</span>');
     row.innerHTML = `
@@ -1321,14 +1605,12 @@ function applyTelemetry(d) {
   badge.className   = isRacing ? 'live' : 'menu';
   badge.textContent = isRacing ? 'LIVE' : 'MENU';
 
-  // Header
   document.getElementById('hdr-session').textContent = d.session_id?.slice(0,8) ?? '—';
   document.getElementById('hdr-car').textContent =
     [d.car_class, d.drivetrain, d.car_ordinal ? `#${d.car_ordinal}` : ''].filter(Boolean).join(' · ') || '—';
   document.getElementById('car-class').textContent =
     [d.car_class, d.drivetrain].filter(Boolean).join(' · ') || '—';
 
-  // Tachometer
   const sFL = smooth('slipFL', d.tire_combined_slip_fl ?? 0);
   const sFR = smooth('slipFR', d.tire_combined_slip_fr ?? 0);
   const sRL = smooth('slipRL', d.tire_combined_slip_rl ?? 0);
@@ -1343,19 +1625,10 @@ function applyTelemetry(d) {
     d.boost ?? 0,
   );
 
-  // Lap times
-  updateLapTimes(
-    d.current_lap_time, d.best_lap, d.last_lap,
-    d.lap_number, d.race_position,
-  );
+  updateLapTimes(d.current_lap_time, d.best_lap, d.last_lap, d.lap_number, d.race_position);
 
-  // G-force
-  updateGForce(
-    smooth('gLat', d.g_lateral ?? 0),
-    smooth('gLon', d.g_longitudinal ?? 0),
-  );
+  updateGForce(smooth('gLat', d.g_lateral ?? 0), smooth('gLon', d.g_longitudinal ?? 0));
 
-  // Inputs
   updateInputs(
     smooth('thr',   d.throttle_pct ?? 0),
     smooth('brk',   d.brake_pct    ?? 0),
@@ -1364,18 +1637,17 @@ function applyTelemetry(d) {
     smooth('steer', d.steer        ?? 0),
   );
 
-  // Tire grip (cockpit)
-  updateTireGrip('fl', d.tire_temp_fl, sFL, smooth('suspFL', d.norm_susp_fl ?? 0.5));
-  updateTireGrip('fr', d.tire_temp_fr, sFR, smooth('suspFR', d.norm_susp_fr ?? 0.5));
-  updateTireGrip('rl', d.tire_temp_rl, sRL, smooth('suspRL', d.norm_susp_rl ?? 0.5));
-  updateTireGrip('rr', d.tire_temp_rr, sRR, smooth('suspRR', d.norm_susp_rr ?? 0.5));
-  updateHandlingState(sFL, sFR, sRL, sRR);
+  if (isVisible('tyres')) {
+    updateTireGrip('fl', d.tire_temp_fl, sFL, smooth('suspFL', d.norm_susp_fl ?? 0.5));
+    updateTireGrip('fr', d.tire_temp_fr, sFR, smooth('suspFR', d.norm_susp_fr ?? 0.5));
+    updateTireGrip('rl', d.tire_temp_rl, sRL, smooth('suspRL', d.norm_susp_rl ?? 0.5));
+    updateTireGrip('rr', d.tire_temp_rr, sRR, smooth('suspRR', d.norm_susp_rr ?? 0.5));
+    updateHandlingState(sFL, sFR, sRL, sRR);
+  }
 
-  // Maps
   mapUpdate(d.pos_x ?? 0, d.pos_z ?? 0, d.speed_kmh ?? 0, d.lap_number ?? 0);
   gpsMapUpdate(d.pos_x ?? 0, d.pos_z ?? 0, d.speed_kmh ?? 0, d.lap_number ?? 0);
 
-  // Other sub-views
   updateTelemetry(d);
   updateMapOverlay(d);
 }
@@ -1413,22 +1685,38 @@ async function pollLaps() {
 }
 
 // ── Init ───────────────────────────────────────────────────────────────────────
-// Grafana link — use current hostname
-document.getElementById('grafana-link').href = `http://${window.location.hostname}:3000`;
-
-// Version badge
 fetch('/api/version').then(r => r.json()).then(d => {
   const el = document.getElementById('version-badge');
   if (el) el.textContent = 'v' + d.version;
 }).catch(() => {});
 
-// Init gear dots
+initGrid();
+loadLayout();
+
+document.querySelectorAll('.tile-body[data-wid]').forEach(el => tileObserver.observe(el));
+
 updateGearDots(0);
+sizeTachoCanvas();
+drawTacho(0, 8500, 0);
+sizeGpsCanvas();
+drawGpsTrace();
+initLeafletMap();
+refreshPicker();
+refreshCanvases();
 
 connectSSE();
 pollLaps();
 setInterval(pollLaps, LAPS_POLL);
-switchSubView(currentSubView);
+
+// Close the widget picker on an outside click
+document.addEventListener('click', e => {
+  const wrap = document.getElementById('picker-wrap');
+  if (wrap && !wrap.contains(e.target)) {
+    document.getElementById('picker').classList.remove('open');
+  }
+});
+
+window.addEventListener('resize', () => refreshCanvases());
 </script>
 </body>
 </html>
