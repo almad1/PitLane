@@ -48,8 +48,12 @@ body {
 #header .logo { font-size: 1.1rem; font-weight: 700; letter-spacing: 3px; color: var(--primary); }
 #header .logo span { color: var(--muted); font-weight: 400; }
 #version-badge { font: 0.6rem var(--font-mono); color: var(--muted); letter-spacing: 1px; flex-shrink: 0; }
-#session-info { font-size: 0.75rem; color: var(--muted); flex: 1; }
+#session-info {
+  font-size: 0.75rem; color: var(--muted); flex: 1; min-width: 0;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
 #session-info b { color: var(--text); }
+#hdr-car { color: var(--text); }
 #live-badge {
   font-size: 0.7rem; font-weight: 700; letter-spacing: 2px;
   padding: 3px 10px; border-radius: 3px;
@@ -155,7 +159,14 @@ body.editing .tile-hide { display: block; }
   flex: 1; display: flex; flex-direction: column;
   justify-content: center; padding-left: 10px; min-width: 0;
 }
-.tacho-car-class { font: 0.6rem var(--font-mono); color: var(--muted); letter-spacing: 2px; margin-bottom: 5px; }
+.tacho-car-name {
+  font: 700 0.62rem var(--font-mono); color: var(--text); letter-spacing: 0.5px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 1px;
+}
+.tacho-car-class {
+  font: 0.6rem var(--font-mono); color: var(--muted); letter-spacing: 2px; margin-bottom: 5px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
 .tacho-speed { font: 700 2.6rem/1 var(--font-mono); color: var(--text); letter-spacing: -2px; }
 .tacho-speed-unit { font: 0.55rem var(--font-mono); color: var(--muted); letter-spacing: 3px; margin-top: 3px; }
 .tacho-stats { display: flex; gap: 16px; margin-top: 8px; }
@@ -385,6 +396,7 @@ body.editing #offline-overlay { display: none; }
         <div class="tacho-body">
           <canvas id="tacho-canvas"></canvas>
           <div class="tacho-right">
+            <div class="tacho-car-name" id="car-name">—</div>
             <div class="tacho-car-class" id="car-class">—</div>
             <div class="tacho-speed" id="tacho-speed">0</div>
             <div class="tacho-speed-unit">KM/H</div>
@@ -830,6 +842,56 @@ function fmtTime(s) {
 function clamp(v, lo, hi) { return Math.min(Math.max(v, lo), hi); }
 function isVisible(id) { return !hiddenWidgets.has(id); }
 function tileBody(id) { return document.querySelector(`.tile-body[data-wid="${id}"]`); }
+
+// ── Car name lookup ────────────────────────────────────────────────────────────
+// car_ordinals.json maps "Name" -> "ordinal"; invert it for ordinal -> name.
+let carDB   = {};
+let _lastCar = { ordinal: null, cls: null, drv: null };
+
+async function loadCarNames() {
+  try {
+    const res  = await fetch('/car_ordinals.json');
+    const data = await res.json();
+    for (const [name, ord] of Object.entries(data)) carDB[String(ord)] = name;
+  } catch (e) {
+    console.warn('Car name DB unavailable:', e.message);
+  }
+  renderCarIdentity();   // telemetry may have already arrived before this resolved
+}
+
+function getCarName(ordinal) {
+  if (ordinal == null || ordinal === '' || ordinal === 0) return null;
+  return carDB[String(ordinal)] || `Car #${ordinal}`;
+}
+
+function setCarIdentity(d) {
+  const next = {
+    ordinal: d.car_ordinal ?? null,
+    cls:     d.car_class   ?? null,
+    drv:     d.drivetrain  ?? null,
+  };
+  if (next.ordinal === _lastCar.ordinal && next.cls === _lastCar.cls && next.drv === _lastCar.drv) return;
+  _lastCar = next;
+  renderCarIdentity();
+}
+
+function renderCarIdentity() {
+  const { ordinal, cls, drv } = _lastCar;
+  const name = getCarName(ordinal);
+  const full = [name, cls, drv].filter(Boolean).join('  ·  ') || '—';
+
+  const hdr = document.getElementById('hdr-car');
+  if (hdr) { hdr.textContent = full; hdr.title = full; }
+
+  const nameEl = document.getElementById('car-name');
+  if (nameEl) { nameEl.textContent = name || '—'; nameEl.title = name || ''; }
+
+  const clsEl = document.getElementById('car-class');
+  if (clsEl) {
+    const sub = [cls, drv].filter(Boolean).join(' · ') || '—';
+    clsEl.textContent = sub; clsEl.title = sub;
+  }
+}
 
 // ══════════════════════════════════════════════════════════════════════════════
 // Layout — edit mode, persistence, widget visibility
@@ -1606,10 +1668,7 @@ function applyTelemetry(d) {
   badge.textContent = isRacing ? 'LIVE' : 'MENU';
 
   document.getElementById('hdr-session').textContent = d.session_id?.slice(0,8) ?? '—';
-  document.getElementById('hdr-car').textContent =
-    [d.car_class, d.drivetrain, d.car_ordinal ? `#${d.car_ordinal}` : ''].filter(Boolean).join(' · ') || '—';
-  document.getElementById('car-class').textContent =
-    [d.car_class, d.drivetrain].filter(Boolean).join(' · ') || '—';
+  setCarIdentity(d);
 
   const sFL = smooth('slipFL', d.tire_combined_slip_fl ?? 0);
   const sFR = smooth('slipFR', d.tire_combined_slip_fr ?? 0);
@@ -1692,6 +1751,7 @@ fetch('/api/version').then(r => r.json()).then(d => {
 
 initGrid();
 loadLayout();
+loadCarNames();
 
 document.querySelectorAll('.tile-body[data-wid]').forEach(el => tileObserver.observe(el));
 
