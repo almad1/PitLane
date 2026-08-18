@@ -541,15 +541,12 @@ let trackData = null, mapLap = null, mapView = '2d', _mapObserver = null;
 // about the cursor, dragging pans (and rotates in 3D). zoom 1 / pan 0 is the
 // classic full-fit frame. `elev` scales the auto elevation exaggeration.
 const DEFAULT_YAW  = -0.9;
-const DEFAULT_TILT = 0.96;   // ~55° from top-down; 0 = flat overhead view
-const MAX_TILT     = 1.32;   // ~76°
-const trackView    = { zoom: 1, panX: 0, panY: 0, yaw: DEFAULT_YAW, tilt: DEFAULT_TILT, elev: 1 };
+const trackView    = { zoom: 1, panX: 0, panY: 0, yaw: DEFAULT_YAW, elev: 1 };
 const analysisView = { zoom: 1, panX: 0, panY: 0 };
 
 function resetView(v, redraw) {
   v.zoom = 1; v.panX = 0; v.panY = 0;
-  if ('yaw'  in v) v.yaw  = DEFAULT_YAW;
-  if ('tilt' in v) v.tilt = DEFAULT_TILT;
+  if ('yaw' in v) v.yaw = DEFAULT_YAW;
   if (redraw) redraw();
 }
 
@@ -587,8 +584,7 @@ function bindMapInteraction(canvas, view, redraw, opts = {}) {
 
   canvas.addEventListener('pointerdown', (e) => {
     canvas.setPointerCapture(e.pointerId);
-    // In 3D a plain drag orbits (horizontal = yaw, vertical = tilt); hold
-    // Shift to pan instead. 2D always pans.
+    // In 3D a plain drag rotates the view; hold Shift to pan. 2D always pans.
     drag = { x: e.clientX, y: e.clientY, rotate: !!opts.canRotate && !e.shiftKey && mapView === '3d' };
     canvas.style.cursor = 'grabbing';
   });
@@ -597,10 +593,8 @@ function bindMapInteraction(canvas, view, redraw, opts = {}) {
     if (!drag) return;
     const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
     drag.x = e.clientX; drag.y = e.clientY;
-    if (drag.rotate) {
-      view.yaw  += dx * 0.008;
-      view.tilt  = Math.min(MAX_TILT, Math.max(0, view.tilt + dy * 0.005));
-    } else { view.panX += dx; view.panY += dy; }
+    if (drag.rotate) view.yaw += dx * 0.008;
+    else { view.panX += dx; view.panY += dy; }
     redraw();
   });
 
@@ -1433,7 +1427,7 @@ function setMapView(mode) {
   $('#btn3d').classList.toggle('active', mode === '3d');
   $('#elev-ctl').style.display = mode === '3d' ? 'flex' : 'none';
   $('#map-hint').textContent = mode === '3d'
-    ? 'drag to orbit / tilt · shift-drag to pan · scroll to zoom · double-click to reset'
+    ? 'drag to rotate · shift-drag to pan · scroll to zoom · double-click to reset'
     : 'drag to pan · scroll to zoom · double-click to reset';
   drawCurrentMap();
 }
@@ -1466,128 +1460,195 @@ function drawCurrentMap() {
   const dpr = devicePixelRatio || 1;
   const W = wrap.clientWidth, H = wrap.clientHeight;
   if (!W || !H) return;
-  canvas.width = Math.floor(W * dpr); canvas.height = Math.floor(H * dpr);
-  canvas.style.width = W + 'px';      canvas.style.height = H + 'px';
+  // Reallocate the backing store only on a real size change — a drag redraws
+  // at pointer rate and reassigning width/height reallocates ~8 MB each time.
+  const bw = Math.floor(W * dpr), bh = Math.floor(H * dpr);
+  if (canvas.width !== bw || canvas.height !== bh) {
+    canvas.width = bw; canvas.height = bh;
+    canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+  }
   const ctx = canvas.getContext('2d');
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, W, H);
 
-  const pts = mapLap != null ? trackData.points.filter(p => p.lap === mapLap) : trackData.points;
-  if (!pts.length) return;
+  // Lap filter: contacts/jumps carry indices into the full downsampled point
+  // array, so remap them onto the filtered slice (laps are contiguous).
+  let pts = trackData.points, contacts = trackData.contacts, jumps = trackData.jumps;
+  if (mapLap != null) {
+    const first = trackData.points.findIndex(p => p.lap === mapLap);
+    pts = trackData.points.filter(p => p.lap === mapLap);
+    contacts = contacts.filter(c => c.idx >= first && c.idx < first + pts.length)
+                       .map(c => ({ ...c, idx: c.idx - first }));
+    jumps = jumps.filter(j => j.start_idx >= first && j.end_idx < first + pts.length)
+                 .map(j => ({ ...j, start_idx: j.start_idx - first, end_idx: j.end_idx - first }));
+  }
+  if (pts.length < 2) return;
+  drawSessionMap(ctx, W, H, pts, contacts, jumps, mapView === '3d');
+}
+
+/* Session track renderer, modelled on LapScope's drawMap (see THIRD_PARTY.md):
+   ground shadow + elevation posts under a floating speed-coloured ribbon,
+   robust p5–p95 elevation band, fit over both ribbon and shadow, start dot
+   with drive-direction arrow, contact sparks. */
+function drawSessionMap(ctx, W, H, pts, contacts, jumps, three) {
+  ctx.fillStyle = cssVar('--bg') || '#07070e';
+  ctx.fillRect(0, 0, W, H);
+
+  let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+  for (const p of pts) {
+    if (p.x < minX) minX = p.x; if (p.x > maxX) maxX = p.x;
+    if (p.z < minZ) minZ = p.z; if (p.z > maxZ) maxZ = p.z;
+  }
+  const horiz = Math.max(maxX - minX, maxZ - minZ, 1);
+
+  // Robust elevation band: airborne spikes (cross-country jumps) must not
+  // dictate the vertical scale, so exaggeration comes from the p5–p95 band
+  // and anything above it is capped at 1.8x the band height.
+  let yLo = 0, yBand = 0, yRange = 0;
+  if (three) {
+    const ys = pts.map(p => p.y).sort((a, b) => a - b);
+    yRange = ys[ys.length - 1] - ys[0];
+    yLo    = ys[Math.floor(0.05 * (ys.length - 1))];
+    yBand  = ys[Math.floor(0.95 * (ys.length - 1))] - yLo;
+    if (yBand <= 0.3 && yRange > 1) { yLo = ys[0]; yBand = yRange; }
+  }
+  // Elevation reads at ~18% of the track extent (x the slider).
+  const exag  = (three && yBand > 0.3) ? (0.18 * horiz) / yBand * trackView.elev : 0;
+  const yDisp = (y) => Math.min(Math.max(0, y - yLo), yBand * 1.8) * exag;
+
+  const cosY = Math.cos(trackView.yaw), sinY = Math.sin(trackView.yaw);
+  const raw = three
+    ? (x, y, z, ground) => {
+        // rotate the 2D map plane (x, -z) so 3D keeps the same handedness as
+        // 2D — rotating (x, z) would mirror the track
+        const u = x, v = -z;
+        const xr = u * cosY - v * sinY, zr = u * sinY + v * cosY;
+        return [xr, zr * 0.52 - (ground ? 0 : yDisp(y)) * 0.9];
+      }
+    : (x, y, z) => [x, -z];
+
+  // Fit over every point that may be drawn (ground + elevated in 3D), so the
+  // floating ribbon and its shadow always land inside the canvas.
+  let pMinX = Infinity, pMaxX = -Infinity, pMinY = Infinity, pMaxY = -Infinity;
+  const grounds = three ? [true, false] : [false];
+  for (const p of pts) {
+    for (const g of grounds) {
+      const [sx, sy] = raw(p.x, p.y, p.z, g);
+      if (sx < pMinX) pMinX = sx; if (sx > pMaxX) pMaxX = sx;
+      if (sy < pMinY) pMinY = sy; if (sy > pMaxY) pMaxY = sy;
+    }
+  }
+  const pad   = 26;
+  const scale = Math.min((W - 2 * pad) / Math.max(1e-6, pMaxX - pMinX),
+                         (H - 2 * pad) / Math.max(1e-6, pMaxY - pMinY));
+  const offX  = (W - (pMaxX - pMinX) * scale) / 2 - pMinX * scale;
+  const offY  = (H - (pMaxY - pMinY) * scale) / 2 - pMinY * scale;
+  const P = (x, y, z, ground) => {
+    const [sx, sy] = raw(x, y, z, ground);
+    const v = applyView(sx * scale + offX, sy * scale + offY, W, H, trackView);
+    return [v.cx, v.cy];
+  };
+  const at = (i, ground) => P(pts[i].x, pts[i].y, pts[i].z, ground);
+
   const maxSpd = Math.max(...pts.map(p => p.spd)) || 1;
   const speedColor = (spd) => {
     const t = Math.min(spd / maxSpd, 1);
-    return `hsl(${240 - t * 240},100%,${50 + (1-t)*5}%)`;
+    return `hsl(${240 - t * 240},100%,${50 + (1 - t) * 5}%)`;
   };
-  if (mapView === '2d') draw2DMap(ctx, W, H, pts, trackData.contacts, trackData.jumps, speedColor);
-  else draw3DMap(ctx, W, H, pts, trackData.contacts, trackData.jumps, trackData.bounds, speedColor);
-}
 
-function draw2DMap(ctx, W, H, pts, contacts, jumps, speedColor) {
-  ctx.clearRect(0, 0, W, H);
-  const pad = 28;
-  const xs = pts.map(p => p.x), zs = pts.map(p => p.z);
-  const minX = Math.min(...xs), maxX = Math.max(...xs);
-  const minZ = Math.min(...zs), maxZ = Math.max(...zs);
-  const rangeX = maxX - minX || 1, rangeZ = maxZ - minZ || 1;
-  const scale = Math.min((W - pad*2) / rangeX, (H - pad*2) / rangeZ);
-  const offX = (W - rangeX * scale) / 2, offZ = (H - rangeZ * scale) / 2;
-  const project = (x, z) => applyView(
-    offX + (x - minX) * scale, offZ + (z - minZ) * scale, W, H, trackView);
+  if (three) {
+    // Ground shadow + elevation posts first, so the ribbon reads as floating.
+    ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+    ctx.lineWidth = 3;
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    ctx.beginPath();
+    for (let i = 0; i < pts.length; i++) {
+      const [X, Y] = at(i, true);
+      i === 0 ? ctx.moveTo(X, Y) : ctx.lineTo(X, Y);
+    }
+    ctx.stroke();
 
-  ctx.fillStyle = cssVar('--bg') || '#07070e';
-  ctx.fillRect(0, 0, W, H);
+    ctx.strokeStyle = 'rgba(123,135,148,0.18)';
+    ctx.lineWidth = 1;
+    const step = Math.max(1, Math.round(pts.length / 90));
+    for (let i = 0; i < pts.length; i += step) {
+      const [gx, gy] = at(i, true), [ax, ay] = at(i, false);
+      ctx.beginPath(); ctx.moveTo(gx, gy); ctx.lineTo(ax, ay); ctx.stroke();
+    }
+  }
 
-  ctx.lineWidth = 7; ctx.strokeStyle = 'rgba(0,0,0,0.5)';
-  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-  ctx.beginPath();
-  pts.forEach((p, i) => { const {cx,cy} = project(p.x, p.z); i === 0 ? ctx.moveTo(cx,cy) : ctx.lineTo(cx,cy); });
-  ctx.stroke();
-
+  // Speed-coloured ribbon
   ctx.lineWidth = 3; ctx.lineCap = 'round';
+  let prev = at(0, false);
   for (let i = 1; i < pts.length; i++) {
-    const a = project(pts[i-1].x, pts[i-1].z), b = project(pts[i].x, pts[i].z);
-    ctx.beginPath();
-    ctx.strokeStyle = speedColor((pts[i].spd + pts[i-1].spd) / 2);
-    ctx.moveTo(a.cx, a.cy); ctx.lineTo(b.cx, b.cy); ctx.stroke();
+    const cur = at(i, false);
+    ctx.strokeStyle = speedColor((pts[i].spd + pts[i - 1].spd) / 2);
+    ctx.beginPath(); ctx.moveTo(prev[0], prev[1]); ctx.lineTo(cur[0], cur[1]); ctx.stroke();
+    prev = cur;
   }
+
+  // Jumps (dashed cyan, takeoff -> touchdown)
   for (const j of jumps) {
-    const a = project(pts[Math.min(j.start_idx, pts.length-1)].x, pts[Math.min(j.start_idx, pts.length-1)].z);
-    const b = project(pts[Math.min(j.end_idx, pts.length-1)].x,   pts[Math.min(j.end_idx, pts.length-1)].z);
-    ctx.beginPath(); ctx.strokeStyle = '#00c8f0'; ctx.lineWidth = 3; ctx.setLineDash([5,4]);
-    ctx.moveTo(a.cx, a.cy); ctx.lineTo(b.cx, b.cy); ctx.stroke(); ctx.setLineDash([]);
+    const a = at(Math.min(j.start_idx, pts.length - 1), false);
+    const b = at(Math.min(j.end_idx,   pts.length - 1), false);
+    ctx.beginPath(); ctx.strokeStyle = '#00c8f0'; ctx.lineWidth = 3; ctx.setLineDash([5, 4]);
+    ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke(); ctx.setLineDash([]);
   }
+
+  // Contacts as 4-point sparks with glow — they read against any ribbon colour
   for (const c of contacts) {
     if (c.idx >= pts.length) continue;
-    const {cx,cy} = project(pts[c.idx].x, pts[c.idx].z);
-    ctx.beginPath(); ctx.arc(cx, cy, 5, 0, Math.PI*2);
-    ctx.fillStyle = '#e03838'; ctx.fill();
-    ctx.lineWidth = 1.5; ctx.strokeStyle = '#ff8888'; ctx.stroke();
-  }
-  const s0 = project(pts[0].x, pts[0].z);
-  ctx.beginPath(); ctx.arc(s0.cx, s0.cy, 5, 0, Math.PI*2); ctx.fillStyle = '#fff'; ctx.fill();
-}
-
-function draw3DMap(ctx, W, H, pts, contacts, jumps, bounds, speedColor) {
-  ctx.clearRect(0, 0, W, H);
-  const cX = (bounds.minX + bounds.maxX) / 2, cZ = (bounds.minZ + bounds.maxZ) / 2;
-  const rangeXZ = Math.max(bounds.maxX - bounds.minX, bounds.maxZ - bounds.minZ) || 1;
-  // Orbit camera: yaw spins about the vertical axis, tilt leans the ground
-  // plane over (0 = straight down, i.e. the 2D view). The old projection was
-  // a fixed axonometric that scaled elevation by rangeXZ — on a multi-km
-  // route 134 m of altitude came out at 1–2 px, so "3D" looked identical to
-  // 2D. Elevation is now normalised by its own range and given a fixed
-  // visual budget of the track extent, so it is always visible and the
-  // slider scales from there.
-  const elevRange = Math.max(bounds.maxY - bounds.minY, 1e-6);
-  const cosY = Math.cos(trackView.yaw),  sinY = Math.sin(trackView.yaw);
-  const cosT = Math.cos(trackView.tilt), sinT = Math.sin(trackView.tilt);
-  const elevBudget = 0.18 * sinT * trackView.elev;
-  const project3D = (x, y, z) => {
-    const nx = (x - cX) / rangeXZ, nz = (z - cZ) / rangeXZ;
-    const ny = (y - bounds.minY) / elevRange;   // 0..1 over the route's altitude span
-    const rx = nx * cosY - nz * sinY;
-    const rz = nx * sinY + nz * cosY;
-    const sx = rx;
-    const sy = rz * cosT - ny * elevBudget;
-    const scale = Math.min(W, H) * 0.42;
-    return applyView(W/2 + sx * scale, H/2 + sy * scale, W, H, trackView);
-  };
-  ctx.fillStyle = cssVar('--bg') || '#07070e';
-  ctx.fillRect(0, 0, W, H);
-
-  ctx.lineWidth = 7; ctx.strokeStyle = 'rgba(0,0,0,0.4)';
-  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-  ctx.beginPath();
-  pts.forEach((p, i) => { const {cx,cy} = project3D(p.x, bounds.minY, p.z); i === 0 ? ctx.moveTo(cx,cy) : ctx.lineTo(cx,cy); });
-  ctx.stroke();
-
-  ctx.lineWidth = 2.5; ctx.lineCap = 'round';
-  for (let i = 1; i < pts.length; i++) {
-    const a = project3D(pts[i-1].x, pts[i-1].y, pts[i-1].z), b = project3D(pts[i].x, pts[i].y, pts[i].z);
+    const [X, Y] = at(c.idx, false);
+    ctx.save();
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5;
+    ctx.fillStyle = '#e03838'; ctx.shadowColor = '#e03838'; ctx.shadowBlur = 8;
     ctx.beginPath();
-    ctx.strokeStyle = speedColor((pts[i].spd + pts[i-1].spd) / 2);
-    ctx.moveTo(a.cx, a.cy); ctx.lineTo(b.cx, b.cy); ctx.stroke();
+    for (let k = 0; k < 8; k++) {
+      const a = (k * Math.PI) / 4;
+      const rr = k % 2 ? 2.8 : 7;
+      const px = X + Math.cos(a) * rr, py = Y + Math.sin(a) * rr;
+      k === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+    ctx.fill(); ctx.stroke();
+    ctx.restore();
   }
-  for (const j of jumps) {
-    const si = Math.min(j.start_idx, pts.length-1), ei = Math.min(j.end_idx, pts.length-1);
-    const a = project3D(pts[si].x, pts[si].y, pts[si].z), b = project3D(pts[ei].x, pts[ei].y, pts[ei].z);
-    ctx.beginPath(); ctx.strokeStyle = '#00c8f0'; ctx.lineWidth = 3; ctx.setLineDash([5,4]);
-    ctx.moveTo(a.cx, a.cy); ctx.lineTo(b.cx, b.cy); ctx.stroke(); ctx.setLineDash([]);
-  }
-  for (const c of contacts) {
-    if (c.idx >= pts.length) continue;
-    const {cx,cy} = project3D(pts[c.idx].x, pts[c.idx].y, pts[c.idx].z);
-    ctx.beginPath(); ctx.arc(cx, cy, 5, 0, Math.PI*2);
-    ctx.fillStyle = '#e03838'; ctx.fill();
-    ctx.lineWidth = 1.5; ctx.strokeStyle = '#ff8888'; ctx.stroke();
-  }
-  const s0 = project3D(pts[0].x, pts[0].y, pts[0].z);
-  ctx.beginPath(); ctx.arc(s0.cx, s0.cy, 5, 0, Math.PI*2); ctx.fillStyle = '#fff'; ctx.fill();
 
-  if (elevRange > 5) {
+  // Start dot + drive-direction arrow, sampled in screen space so it follows
+  // the projection in both views.
+  const [sx, sy] = at(0, false);
+  ctx.fillStyle = '#34d399';
+  ctx.beginPath(); ctx.arc(sx, sy, 6, 0, Math.PI * 2); ctx.fill();
+
+  let j2 = 1;
+  while (j2 < pts.length - 1) {
+    const [px, py] = at(j2, false);
+    if (Math.hypot(px - sx, py - sy) >= 14) break;
+    j2++;
+  }
+  const [hx, hy] = at(j2, false);
+  if (Math.hypot(hx - sx, hy - sy) > 2) {
+    const ang = Math.atan2(hy - sy, hx - sx);
+    const ax = sx + Math.cos(ang) * 24, ay = sy + Math.sin(ang) * 24;
+    ctx.strokeStyle = '#34d399'; ctx.lineWidth = 2.5; ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(sx + Math.cos(ang) * 9, sy + Math.sin(ang) * 9);
+    ctx.lineTo(ax, ay);
+    ctx.stroke();
+    ctx.fillStyle = '#34d399';
+    ctx.beginPath();
+    ctx.moveTo(ax + Math.cos(ang) * 9, ay + Math.sin(ang) * 9);
+    ctx.lineTo(ax + Math.cos(ang + 2.4) * 6.5, ay + Math.sin(ang + 2.4) * 6.5);
+    ctx.lineTo(ax + Math.cos(ang - 2.4) * 6.5, ay + Math.sin(ang - 2.4) * 6.5);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  // Elevation range label
+  if (three && yRange > 5) {
     ctx.fillStyle = 'rgba(255,255,255,0.35)';
     ctx.font = '10px Courier New'; ctx.textAlign = 'right';
-    ctx.fillText(`↕ ${Math.round(elevRange)} m elev`, W - 10, H - 10);
+    ctx.fillText(`\u2195 ${Math.round(yRange)} m elev`, W - 10, H - 10);
   }
 }
 

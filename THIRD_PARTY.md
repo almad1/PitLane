@@ -38,6 +38,10 @@ Specifically adapted from `app/static/js/analysis.js`:
 - chart-hover to track-map marker linkage
 - the A–F multi-lap pick tray and its colour palette
 - the raw-telemetry-at-cursor table
+- the track-map renderer (`drawMap`): yaw-rotated `(x, −z)` projection with
+  ground shadow and elevation posts, robust p5–p95 elevation band with the
+  1.8× spike cap, fit-over-ribbon-and-shadow, start dot with drive-direction
+  arrow, and contact sparks
 
 The backend is **not** derived from LapScope: LapScope stores laps in SQLite,
 whereas PitLane queries InfluxDB, so all data access was written from scratch.
